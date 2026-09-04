@@ -14,6 +14,10 @@
   const pauseTitle = document.getElementById("pauseTitle");
   const pauseMessage = document.getElementById("pauseMessage");
   const actionButton = document.querySelector("[data-action='fire']");
+  const bridgeControls = document.getElementById("bridgeControls");
+  const bridgeCondition = document.getElementById("bridgeCondition");
+  const smokeButton = document.getElementById("smokeButton");
+  const drinkButton = document.getElementById("drinkButton");
   const soundButton = document.getElementById("soundButton");
 
   const COLS = 11;
@@ -65,13 +69,15 @@
   let sailAway = 0;
   let loadMessage = "FIND THE MANIFEST CARGO";
   let camera = { x: 5.5, y: 6.5, zoom: 1.35 };
+  let bridge = { rudder: 0, throttle: .45, speed: 0, lateral: 0, distance: 0, smoke: 0, drink: 0, roll: 0 };
 
   const cellIndex = (col, row) => row * COLS + col;
-  const shiftType = () => ["load", "traffic", "maze", "vessel"][level % 4];
+  const shiftType = () => ["bridge", "traffic", "maze", "vessel", "load"][level % 5];
   const isTrafficShift = () => shiftType() === "traffic";
   const isMazeShift = () => shiftType() === "maze";
   const isVesselShift = () => shiftType() === "vessel";
   const isLoadShift = () => shiftType() === "load";
+  const isBridgeShift = () => shiftType() === "bridge";
   const CARDINALS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
   const cargoCatalog = [
     { id: "beer", name: "BEER", clue: "KEG / AMBER / 480KG", color: "#e4aa31", mark: "B" },
@@ -87,8 +93,23 @@
     traffic: { tempo: .25, bass: [110, 110, 130.81, 98, 110, 146.83, 130.81, 98], lead: [220, 261.63, 293.66, 329.63, 293.66, 261.63, 246.94, 196] },
     maze: { tempo: .29, bass: [82.41, 98, 110, 82.41, 73.42, 98, 103.83, 73.42], lead: [164.81, 196, 220, 246.94, 220, 196, 174.61, 146.83] },
     vessel: { tempo: .31, bass: [73.42, 73.42, 98, 110, 73.42, 130.81, 110, 98], lead: [293.66, 349.23, 392, 440, 392, 349.23, 329.63, 293.66] },
-    load: { tempo: .27, bass: [130.81, 164.81, 196, 164.81, 146.83, 174.61, 220, 174.61], lead: [523.25, 659.25, 783.99, 659.25, 587.33, 698.46, 880, 698.46] }
+    load: { tempo: .27, bass: [130.81, 164.81, 196, 164.81, 146.83, 174.61, 220, 174.61], lead: [523.25, 659.25, 783.99, 659.25, 587.33, 698.46, 880, 698.46] },
+    bridge: { tempo: .34, bass: [55, 73.42, 82.41, 73.42, 61.74, 82.41, 98, 82.41], lead: [220, 293.66, 329.63, 293.66, 246.94, 329.63, 392, 329.63] }
   };
+  const photoSources = {
+    terminal: "https://images.unsplash.com/photo-1494412651409-8963ce7935a7?auto=format&fit=crop&w=1800&q=82",
+    containers: "https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=1800&q=82",
+    vessel: "https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=1800&q=84",
+    ocean: "https://images.unsplash.com/photo-1540946485063-a40da27545f8?auto=format&fit=crop&w=1800&q=84"
+  };
+  const photoAssets = {};
+  Object.entries(photoSources).forEach(([name, source]) => {
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.decoding = "async";
+    image.src = source;
+    photoAssets[name] = image;
+  });
 
   const laneConfig = [
     { row: 2, dir: -1, speed: 1.35, gap: 4.2, kind: "straddle", label: "STRADDLE CARRIER", length: 2.25, color: COLORS.amber },
@@ -121,6 +142,28 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     cellW = viewW / COLS;
     cellH = viewH / ROWS;
+  }
+  function drawPhotoBackdrop(name, alpha = .45) {
+    const image = photoAssets[name];
+    if (!image?.complete || !image.naturalWidth) return false;
+    const imageRatio = image.naturalWidth / image.naturalHeight;
+    const viewRatio = viewW / viewH;
+    let sourceX = 0;
+    let sourceY = 0;
+    let sourceWidth = image.naturalWidth;
+    let sourceHeight = image.naturalHeight;
+    if (imageRatio > viewRatio) {
+      sourceWidth = image.naturalHeight * viewRatio;
+      sourceX = (image.naturalWidth - sourceWidth) / 2;
+    } else {
+      sourceHeight = image.naturalWidth / viewRatio;
+      sourceY = (image.naturalHeight - sourceHeight) / 2;
+    }
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, viewW, viewH);
+    ctx.restore();
+    return true;
   }
 
   function initVehicles() {
@@ -225,6 +268,37 @@
     loadMessage = "FIND THE THREE MANIFEST ITEMS";
     player.facing = "up";
   }
+  function initBridge() {
+    bridge = { rudder: 0, throttle: .45, speed: 0, lateral: 0, distance: 0, smoke: 0, drink: 0, roll: 0 };
+    bridgeCondition.textContent = "SOBER · CLEAR";
+  }
+
+  function bridgeControl(direction) {
+    if (!isBridgeShift() || paused) return;
+    if (direction === "left") bridge.rudder = Math.max(-1, bridge.rudder - .22);
+    if (direction === "right") bridge.rudder = Math.min(1, bridge.rudder + .22);
+    if (direction === "up") bridge.throttle = Math.min(1, bridge.throttle + .1);
+    if (direction === "down") bridge.throttle = Math.max(0, bridge.throttle - .1);
+    playTone(155 + bridge.throttle * 90, .035, "square", .012);
+  }
+
+  function useSmoke() {
+    if (!running || paused || !isBridgeShift()) return;
+    bridge.smoke = Math.min(1, bridge.smoke + .62);
+    score = Math.max(0, score - 25);
+    playNoise(.5, .01, 420);
+    updateHud();
+  }
+
+  function useDrink() {
+    if (!running || paused || !isBridgeShift()) return;
+    bridge.drink = Math.min(1, bridge.drink + .72);
+    score = Math.max(0, score - 50);
+    playTone(440, .08, "sine", .015);
+    playTone(660, .12, "sine", .012, .08);
+    updateHud();
+  }
+
 
   function setupLevel() {
     resetPlayer();
@@ -242,19 +316,23 @@
     if (isMazeShift()) {
       generateMaze();
       initMazeHazards();
-      timeLeft = Math.max(44, 68 - Math.floor(level / 4) * 3);
+      timeLeft = Math.max(44, 68 - Math.floor(level / 5) * 3);
     } else if (isVesselShift()) {
       mazeWalls.fill(0);
       initPlatformer();
-      timeLeft = Math.max(52, 76 - Math.floor(level / 4) * 3);
+      timeLeft = Math.max(52, 76 - Math.floor(level / 5) * 3);
     } else if (isLoadShift()) {
       mazeWalls.fill(0);
       initLoadPuzzle();
-      timeLeft = Math.max(60, 92 - Math.floor(level / 4) * 3);
+      timeLeft = Math.max(60, 92 - Math.floor(level / 5) * 3);
+    } else if (isBridgeShift()) {
+      mazeWalls.fill(0);
+      initBridge();
+      timeLeft = Math.max(70, 120 - Math.floor(level / 5) * 4);
     } else {
       mazeWalls.fill(0);
       initVehicles();
-      timeLeft = Math.max(24, 46 - Math.floor(level / 4) * 2);
+      timeLeft = Math.max(24, 46 - Math.floor(level / 5) * 2);
     }
     updateHud();
     updateCamera(0, true);
@@ -303,21 +381,24 @@
     ctx.textAlign = "left";
     ctx.fillText(`CAM FOLLOW // ${shiftType().toUpperCase()} // ${camera.zoom.toFixed(2)}X`, 19, viewH - 17);
     if (isLoadShift()) {
-      const panelWidth = Math.min(520, viewW * .56);
-      ctx.fillStyle = "rgba(3,12,17,.92)";
-      ctx.beginPath(); ctx.roundRect(10, 10, panelWidth, 66, 6); ctx.fill();
+      const panelWidth = Math.min(680, viewW * .72);
+      ctx.fillStyle = "rgba(3,12,17,.95)";
+      ctx.beginPath(); ctx.roundRect(10, 10, panelWidth, 118, 7); ctx.fill();
       ctx.strokeStyle = loadComplete ? COLORS.cyan : COLORS.amber;
+      ctx.lineWidth = 2;
       ctx.stroke();
       ctx.fillStyle = loadComplete ? COLORS.cyan : COLORS.amber;
+      ctx.font = "800 10px IBM Plex Mono";
+      ctx.fillText(loadComplete ? "BON VOYAGE" : "FIT THE PIECES IN THIS EXACT ORDER", 22, 29);
+      loadPlan.forEach((item, index) => {
+        const y = 49 + index * 21;
+        ctx.fillStyle = item.loaded ? COLORS.cyan : "#eef3ed";
+        ctx.font = "700 10px IBM Plex Mono";
+        ctx.fillText(`BAY ${index + 1}  ${item.loaded ? "STOWED" : item.clue}`, 22, y);
+      });
+      ctx.fillStyle = loadMessage.includes("RESET") ? COLORS.red : "#8fa8ad";
       ctx.font = "700 8px IBM Plex Mono";
-      ctx.fillText(loadComplete ? "BON VOYAGE" : "VESSEL LOAD PLAN", 20, 27);
-      ctx.fillStyle = "#d9e7e3";
-      ctx.font = "600 10px IBM Plex Mono";
-      const planText = loadPlan.map((item, index) => `${index + 1}.${item.loaded ? "[STOWED]" : item.clue}`).join("   ");
-      ctx.fillText(planText, 20, 46);
-      ctx.fillStyle = "#789197";
-      ctx.font = "600 7px IBM Plex Mono";
-      ctx.fillText(loadMessage, 20, 64);
+      ctx.fillText(`MOVE TO THE MATCHING PICTURE + PRESS SPACE/F  //  ${loadMessage}`, 22, 115);
     }
     ctx.save();
     ctx.globalAlpha = .08;
@@ -374,11 +455,14 @@
       traffic: `Shift ${level}: live terminal traffic. Use arrow keys or WASD to cross.`,
       maze: `Shift ${level}: container maze with dock workers. Collect every manifest and reach the north checkpoint.`,
       vessel: `Shift ${level}: vessel platformer. Jump with up or W and fire dangerous-goods magic with Space or F.`,
-      load: `Shift ${level}: vessel load-plan puzzle. Find the three manifest cargo items and press Space or F to load them.`
+      load: `Shift ${level}: stowage puzzle. Fit the pictured cargo pieces into vessel bays in numbered order.`,
+      bridge: `Shift ${level}: three-dimensional vessel bridge simulator. Steer with left and right; control throttle with up and down.`
     };
     canvas.setAttribute("aria-label", labels[shiftType()]);
-    actionButton.textContent = isLoadShift() ? "LOAD" : "FIRE";
-    actionButton.setAttribute("aria-label", isLoadShift() ? "Load selected cargo" : "Fire dangerous-goods magic stun");
+    actionButton.textContent = isLoadShift() ? "FIT" : "FIRE";
+    actionButton.setAttribute("aria-label", isLoadShift() ? "Fit cargo puzzle piece" : "Fire dangerous-goods magic stun");
+    bridgeControls.classList.toggle("hidden", !isBridgeShift());
+    bridgeCondition.textContent = bridge.drink > .05 ? "IMPAIRED · UNSTABLE" : bridge.smoke > .05 ? "SMOKE · LOW VIS" : "SOBER · CLEAR";
   }
 
   function togglePause(force) {
@@ -405,6 +489,10 @@
 
   function move(direction) {
     if (!running || paused || (isLoadShift() && loadComplete)) return;
+    if (isBridgeShift()) {
+      bridgeControl(direction);
+      return;
+    }
     if (isVesselShift()) {
       platformControl(direction, true);
       return;
@@ -431,6 +519,7 @@
   function hitPlayer() {
     if (flash > 0 || boardingProgress > 0) return;
     const respawnVessel = isVesselShift();
+    const respawnBridge = isBridgeShift();
     lives--;
     shake = .35;
     flash = .8;
@@ -451,6 +540,7 @@
           projectiles = [];
           boardingProgress = 0;
         }
+        if (respawnBridge) initBridge();
       }, 360);
       updateHud();
     }
@@ -464,7 +554,7 @@
     playTone(540, .06, "square", .035);
     playTone(720, .12, "square", .035, .08);
     level++;
-    if (level % 4 === 1) lives = Math.min(4, lives + 1);
+    if (level % 5 === 1) lives = Math.min(4, lives + 1);
     best = Math.max(best, score);
     localStorage.setItem("harborHopBest", String(best));
     setupLevel();
@@ -474,13 +564,15 @@
       traffic: "Traffic density has increased. Cross the live terminal again.",
       maze: "Collect all three manifests while angry dock workers patrol the container maze.",
       vessel: "Board the vessel. Your GMR is incorrect and a terror mark has triggered a Home Office inspection.",
-      load: "Build the vessel load plan. Find only the three cargoes listed on the manifest."
+      load: "Build the vessel load plan. Fit the pictured cargo pieces into numbered bays in the correct order.",
+      bridge: "Take the helm of MV Unicorn Star and keep the vessel inside the buoyed channel."
     };
     const buttons = {
       traffic: "START SHIFT",
       maze: "ENTER MAZE",
       vessel: "BOARD VESSEL",
-      load: "OPEN LOAD PLAN"
+      load: "OPEN STOWAGE PUZZLE",
+      bridge: "TAKE THE HELM"
     };
     pauseMessage.textContent = messages[shiftType()];
     document.getElementById("resumeButton").innerHTML = `<span>${buttons[shiftType()]}</span><b>ENTER ↵</b>`;
@@ -692,6 +784,25 @@
     canvas.dataset.sailAway = sailAway.toFixed(2);
     if (sailAway >= 4.2) reachGoal();
   }
+  function updateBridge(dt) {
+    bridge.smoke = Math.max(0, bridge.smoke - dt * .055);
+    bridge.drink = Math.max(0, bridge.drink - dt * .035);
+    const targetSpeed = bridge.throttle * 18;
+    bridge.speed += (targetSpeed - bridge.speed) * Math.min(1, dt * .7);
+    const impairedDrift = Math.sin(performance.now() / 410) * bridge.drink * .42;
+    bridge.lateral += (bridge.rudder * .48 + impairedDrift) * (bridge.speed / 12) * dt;
+    bridge.distance += bridge.speed * dt * .42;
+    bridge.roll += ((bridge.rudder * .045 + impairedDrift * .06) - bridge.roll) * Math.min(1, dt * 3.2);
+    bridge.rudder *= Math.max(0, 1 - dt * .08);
+    bridgeCondition.textContent = bridge.drink > .05 ? "IMPAIRED · UNSTABLE" : bridge.smoke > .05 ? "SMOKE · LOW VIS" : "SOBER · CLEAR";
+    canvas.dataset.bridge = `${bridge.distance.toFixed(1)}m|${bridge.speed.toFixed(1)}kn|${bridge.lateral.toFixed(2)}|${bridge.smoke.toFixed(2)}|${bridge.drink.toFixed(2)}`;
+    if (Math.abs(bridge.lateral) > 1.35) {
+      bridge.lateral = Math.sign(bridge.lateral) * 1.35;
+      hitPlayer();
+    }
+    if (bridge.distance >= 120) reachGoal();
+  }
+
 
   function update(dt) {
     if (!running || paused) return;
@@ -699,14 +810,15 @@
     if (timeLeft <= 0 && !(isLoadShift() && loadComplete) && boardingProgress === 0) {
       timeLeft = 0;
       hitPlayer();
-      timeLeft = isMazeShift() ? Math.max(44, 68 - Math.floor(level / 4) * 3)
-        : isVesselShift() ? Math.max(52, 76 - Math.floor(level / 4) * 3)
-          : isLoadShift() ? Math.max(60, 92 - Math.floor(level / 4) * 3)
-            : Math.max(24, 46 - Math.floor(level / 4) * 2);
+      timeLeft = isMazeShift() ? Math.max(44, 68 - Math.floor(level / 5) * 3)
+        : isVesselShift() ? Math.max(52, 76 - Math.floor(level / 5) * 3)
+          : isLoadShift() ? Math.max(60, 92 - Math.floor(level / 5) * 3)
+            : isBridgeShift() ? Math.max(70, 120 - Math.floor(level / 5) * 4)
+              : Math.max(24, 46 - Math.floor(level / 5) * 2);
     }
 
     if (isTrafficShift()) {
-      const levelSpeed = 1 + Math.floor(level / 4) * .12;
+      const levelSpeed = 1 + Math.floor(level / 5) * .12;
       vehicles.forEach(vehicle => {
         vehicle.x += vehicle.speed * vehicle.dir * levelSpeed * dt;
         if (vehicle.dir > 0 && vehicle.x > COLS + vehicle.length) vehicle.x = -vehicle.length;
@@ -716,9 +828,11 @@
       updatePlatformer(dt);
     } else if (isLoadShift()) {
       updateLoadPuzzle(dt);
+    } else if (isBridgeShift()) {
+      updateBridge(dt);
     }
 
-    if (!isVesselShift() && player.moving > 0) {
+    if (!isVesselShift() && !isBridgeShift() && player.moving > 0) {
       player.moving = Math.max(0, player.moving - dt * 7.5);
       if (player.moving === 0) {
         player.col = player.targetCol;
@@ -776,27 +890,198 @@
     ctx.clearRect(0, 0, viewW, viewH);
     ctx.fillStyle = "#020a0f";
     ctx.fillRect(0, 0, viewW, viewH);
-    ctx.save();
-    if (shake > 0) ctx.translate((Math.random() - .5) * 8 * shake, (Math.random() - .5) * 8 * shake);
-    applyCamera();
-    if (isMazeShift()) {
-      drawMaze();
-      drawDockWorkers();
-    } else if (isVesselShift()) {
-      drawVessel();
-    } else if (isLoadShift()) {
-      drawLoadPuzzle();
+    if (isBridgeShift()) {
+      ctx.save();
+      ctx.translate(viewW / 2, viewH / 2);
+      ctx.rotate(bridge.roll);
+      ctx.translate(-viewW / 2, -viewH / 2);
+      drawBridge3D();
+      ctx.restore();
+      drawCameraFrame();
+      drawTelemetry();
     } else {
-      drawTerminal();
-      drawVehicles();
+      ctx.save();
+      if (shake > 0) ctx.translate((Math.random() - .5) * 8 * shake, (Math.random() - .5) * 8 * shake);
+      applyCamera();
+      if (isMazeShift()) {
+        drawMaze();
+        drawDockWorkers();
+      } else if (isVesselShift()) {
+        drawVessel();
+      } else if (isLoadShift()) {
+        drawLoadPuzzle();
+      } else {
+        drawTerminal();
+        drawVehicles();
+      }
+      if (!(isLoadShift() && loadComplete)) drawPlayer();
+      drawParticles();
+      ctx.restore();
+      drawCameraFrame();
+      drawTelemetry();
     }
-    if (!(isLoadShift() && loadComplete)) drawPlayer();
-    drawParticles();
-    ctx.restore();
-    drawCameraFrame();
-    drawTelemetry();
     if (flash > .5) {
       ctx.fillStyle = `rgba(255,91,75,${(flash - .5) * .22})`;
+      ctx.fillRect(0, 0, viewW, viewH);
+    }
+  }
+
+  function drawBridge3D() {
+    const horizon = viewH * .43;
+    const vanishingX = viewW * .5 - bridge.lateral * viewW * .18 - bridge.rudder * viewW * .055;
+    const sky = ctx.createLinearGradient(0, 0, 0, viewH);
+    sky.addColorStop(0, "#173c55");
+    sky.addColorStop(.43, "#8fb5bd");
+    sky.addColorStop(.44, "#1d566b");
+    sky.addColorStop(1, "#062a3a");
+    ctx.fillStyle = sky;
+    ctx.fillRect(-80, -80, viewW + 160, viewH + 160);
+    drawPhotoBackdrop("ocean", .68);
+    ctx.fillStyle = "rgba(3,26,39,.34)";
+    ctx.fillRect(-80, horizon, viewW + 160, viewH - horizon + 80);
+
+    ctx.save();
+    ctx.globalAlpha = .68;
+    ctx.fillStyle = "#18252b";
+    ctx.beginPath();
+    ctx.moveTo(viewW * .72, horizon - 20);
+    ctx.lineTo(viewW * .94, horizon - 20);
+    ctx.lineTo(viewW * .91, horizon + 10);
+    ctx.lineTo(viewW * .74, horizon + 10);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#d9dfdb";
+    ctx.fillRect(viewW * .79, horizon - 48, viewW * .08, 28);
+    ctx.fillStyle = "#273b43";
+    ctx.fillRect(viewW * .81, horizon - 67, viewW * .018, 19);
+    ctx.strokeStyle = "#273b43";
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(viewW * .82, horizon - 67); ctx.lineTo(viewW * .82, horizon - 95); ctx.stroke();
+    ctx.restore();
+
+    const channelGradient = ctx.createLinearGradient(0, horizon, 0, viewH);
+    channelGradient.addColorStop(0, "rgba(52,145,157,.08)");
+    channelGradient.addColorStop(1, "rgba(42,211,202,.2)");
+    ctx.fillStyle = channelGradient;
+    ctx.beginPath();
+    ctx.moveTo(vanishingX - 8, horizon);
+    ctx.lineTo(vanishingX + 8, horizon);
+    ctx.lineTo(viewW * .96, viewH);
+    ctx.lineTo(viewW * .04, viewH);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "rgba(126,234,223,.32)";
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(vanishingX, horizon); ctx.lineTo(viewW * .04, viewH); ctx.moveTo(vanishingX, horizon); ctx.lineTo(viewW * .96, viewH); ctx.stroke();
+
+    const travel = bridge.distance % 18;
+    for (let marker = 0; marker < 9; marker++) {
+      const depth = (marker * 18 - travel + 162) % 162;
+      const approach = 1 - depth / 162;
+      const perspective = approach * approach;
+      const y = horizon + perspective * (viewH - horizon) * .88;
+      const spread = 10 + perspective * viewW * .43;
+      const size = 3 + perspective * 22;
+      for (const side of [-1, 1]) {
+        const x = vanishingX + side * spread - bridge.lateral * perspective * viewW * .08;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.shadowColor = side < 0 ? "#ef5a4d" : "#4ef1df";
+        ctx.shadowBlur = size * .8;
+        ctx.fillStyle = side < 0 ? "#d84439" : "#36cdbb";
+        ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(size * .55, size); ctx.lineTo(-size * .55, size); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#e8ece6";
+        ctx.fillRect(-size * .22, -size * .3, size * .44, size * .28);
+        ctx.restore();
+      }
+    }
+
+    ctx.strokeStyle = "rgba(210,239,235,.13)";
+    ctx.lineWidth = 1;
+    for (let wake = 0; wake < 12; wake++) {
+      const y = horizon + (wake / 12) ** 2 * (viewH - horizon);
+      const width = (wake / 12) * viewW * .5;
+      ctx.beginPath(); ctx.moveTo(viewW / 2 - width, y); ctx.quadraticCurveTo(viewW / 2, y + 12, viewW / 2 + width, y); ctx.stroke();
+    }
+
+    const metal = ctx.createLinearGradient(0, viewH * .68, 0, viewH);
+    metal.addColorStop(0, "#36454b"); metal.addColorStop(.25, "#101d22"); metal.addColorStop(1, "#050b0e");
+    ctx.fillStyle = metal;
+    ctx.beginPath(); ctx.moveTo(-40, viewH * .79); ctx.lineTo(viewW * .19, viewH * .67); ctx.lineTo(viewW * .81, viewH * .67); ctx.lineTo(viewW + 40, viewH * .79); ctx.lineTo(viewW + 40, viewH + 40); ctx.lineTo(-40, viewH + 40); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "#52646a";
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(viewW * .19, viewH * .67); ctx.lineTo(viewW * .81, viewH * .67); ctx.stroke();
+
+    ctx.fillStyle = "#05090b";
+    ctx.fillRect(0, 0, 24, viewH);
+    ctx.fillRect(viewW - 24, 0, 24, viewH);
+    ctx.fillRect(0, 0, viewW, 22);
+    ctx.strokeStyle = "#53676d";
+    ctx.lineWidth = 8;
+    ctx.beginPath(); ctx.moveTo(viewW * .18, 0); ctx.lineTo(viewW * .27, viewH * .68); ctx.moveTo(viewW * .82, 0); ctx.lineTo(viewW * .73, viewH * .68); ctx.stroke();
+
+    const wheelX = viewW * .5;
+    const wheelY = viewH * .83;
+    const wheelR = Math.min(viewW, viewH) * .105;
+    ctx.save();
+    ctx.translate(wheelX, wheelY);
+    ctx.rotate(bridge.rudder * .85);
+    ctx.strokeStyle = "#7a5737";
+    ctx.lineWidth = 13;
+    ctx.beginPath(); ctx.arc(0, 0, wheelR, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = "#b58a55";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, 0, wheelR, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = "#8b683f";
+    ctx.lineWidth = 9;
+    for (let spoke = 0; spoke < 8; spoke++) {
+      const angle = spoke * Math.PI / 4;
+      ctx.beginPath(); ctx.moveTo(Math.cos(angle) * 12, Math.sin(angle) * 12); ctx.lineTo(Math.cos(angle) * (wheelR + 18), Math.sin(angle) * (wheelR + 18)); ctx.stroke();
+    }
+    ctx.fillStyle = "#b78b54";
+    ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = "rgba(2,8,11,.9)";
+    ctx.beginPath(); ctx.roundRect(45, viewH * .76, 250, 120, 12); ctx.fill();
+    ctx.strokeStyle = "#486069"; ctx.lineWidth = 2; ctx.stroke();
+    const gauges = [
+      { x: 105, label: "SPEED", value: bridge.speed / 18, text: `${bridge.speed.toFixed(1)} kn` },
+      { x: 225, label: "RUDDER", value: (bridge.rudder + 1) / 2, text: `${Math.round(bridge.rudder * 35)}°` }
+    ];
+    gauges.forEach(gauge => {
+      const y = viewH * .82;
+      ctx.strokeStyle = "#789398"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(gauge.x, y, 35, Math.PI, Math.PI * 2); ctx.stroke();
+      const angle = Math.PI + gauge.value * Math.PI;
+      ctx.strokeStyle = COLORS.amber; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(gauge.x, y); ctx.lineTo(gauge.x + Math.cos(angle) * 29, y + Math.sin(angle) * 29); ctx.stroke();
+      ctx.fillStyle = "#d8e4e1"; ctx.font = "700 8px IBM Plex Mono"; ctx.textAlign = "center"; ctx.fillText(gauge.text, gauge.x, y + 22);
+      ctx.fillStyle = "#71878d"; ctx.font = "600 6px IBM Plex Mono"; ctx.fillText(gauge.label, gauge.x, y + 36);
+    });
+
+    ctx.fillStyle = "rgba(2,8,11,.92)";
+    ctx.beginPath(); ctx.roundRect(viewW - 305, viewH * .76, 260, 120, 12); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = COLORS.cyan; ctx.textAlign = "left"; ctx.font = "700 9px IBM Plex Mono";
+    ctx.fillText("MV UNICORN STAR // BRIDGE", viewW - 285, viewH * .79);
+    ctx.fillStyle = "#d8e4e1"; ctx.font = "800 19px IBM Plex Mono";
+    ctx.fillText(`${bridge.distance.toFixed(0)} / 120 m`, viewW - 285, viewH * .84);
+    ctx.fillStyle = Math.abs(bridge.lateral) > .8 ? COLORS.red : COLORS.cyan; ctx.font = "700 8px IBM Plex Mono";
+    ctx.fillText(`CHANNEL OFFSET ${bridge.lateral.toFixed(2)}`, viewW - 285, viewH * .88);
+    ctx.fillStyle = "#82979b"; ctx.font = "600 7px IBM Plex Mono";
+    ctx.fillText("ARROWS: RUDDER + THROTTLE", viewW - 285, viewH * .92);
+
+    ctx.fillStyle = "#f6f8f2";
+    ctx.beginPath(); ctx.ellipse(wheelX - 65, wheelY + 40, 28, 16, -.35, 0, Math.PI * 2); ctx.ellipse(wheelX + 65, wheelY + 40, 28, 16, .35, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = COLORS.pink; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(wheelX - 85, wheelY + 54); ctx.lineTo(wheelX - 58, wheelY + 34); ctx.moveTo(wheelX + 85, wheelY + 54); ctx.lineTo(wheelX + 58, wheelY + 34); ctx.stroke();
+
+    if (bridge.smoke > 0) {
+      ctx.fillStyle = `rgba(205,211,206,${bridge.smoke * .23})`;
+      for (let cloud = 0; cloud < 13; cloud++) {
+        const x = viewW * .15 + ((cloud * 89 + performance.now() * .018) % (viewW * .7));
+        const y = viewH * .25 + Math.sin(cloud * 2.2) * 70;
+        ctx.beginPath(); ctx.arc(x, y, 42 + cloud % 4 * 14, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    if (bridge.drink > 0) {
+      ctx.fillStyle = `rgba(255,181,46,${bridge.drink * .055})`;
       ctx.fillRect(0, 0, viewW, viewH);
     }
   }
@@ -808,6 +1093,9 @@
     base.addColorStop(1, "#09171c");
     ctx.fillStyle = base;
     ctx.fillRect(0, 0, viewW, viewH);
+    drawPhotoBackdrop("terminal", .42);
+    ctx.save();
+    ctx.globalAlpha = .82;
 
     for (let row = 0; row < ROWS; row++) {
       const y = row * cellH;
@@ -835,6 +1123,7 @@
         ctx.fillRect(0, y + cellH * .12, viewW, cellH * .18);
       }
     }
+    ctx.restore();
     ctx.save();
     ctx.font = `600 ${Math.max(6, cellH * .115)}px IBM Plex Mono`;
     ctx.textAlign = "left";
@@ -925,6 +1214,7 @@
     floor.addColorStop(1, "#030b13");
     ctx.fillStyle = floor;
     ctx.fillRect(0, 0, viewW, viewH);
+    drawPhotoBackdrop("containers", .3);
 
     ctx.fillStyle = "rgba(36, 193, 211, .025)";
     for (let row = 0; row < ROWS; row++) {
@@ -1123,6 +1413,7 @@
     sky.addColorStop(1, "#0b3e4b");
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, viewW, viewH);
+    drawPhotoBackdrop("vessel", .32);
 
     ctx.fillStyle = "rgba(189,232,225,.06)";
     ctx.beginPath(); ctx.arc(viewW * .82, viewH * .12, cellH * 1.15, 0, Math.PI * 2); ctx.fill();
@@ -1488,6 +1779,7 @@
     quay.addColorStop(1, "#17282d");
     ctx.fillStyle = quay;
     ctx.fillRect(0, 0, viewW, viewH);
+    drawPhotoBackdrop("terminal", .22);
 
     const waveOffset = performance.now() * .025;
     ctx.strokeStyle = "rgba(87,231,224,.24)";
@@ -1637,15 +1929,28 @@
     ctx.lineWidth = 4;
     ctx.beginPath(); ctx.moveTo(unicornX - cellH * .2, unicornY); ctx.quadraticCurveTo(unicornX - cellH * .45, unicornY + cellH * .12, unicornX - cellH * .34, unicornY + cellH * .28); ctx.stroke();
 
-    const drinkX = unicornX + cellH * .4;
-    const drinkY = unicornY + cellH * .06;
-    ctx.fillStyle = "#f3d34f";
-    ctx.beginPath(); ctx.moveTo(drinkX - 8, drinkY - 8); ctx.lineTo(drinkX + 8, drinkY - 8); ctx.lineTo(drinkX + 5, drinkY + 12); ctx.lineTo(drinkX - 5, drinkY + 12); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = "#f3f1da";
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(drinkX + 3, drinkY - 8); ctx.lineTo(drinkX + 12, drinkY - 22); ctx.stroke();
-    ctx.fillStyle = COLORS.pink;
-    ctx.beginPath(); ctx.arc(drinkX + 13, drinkY - 23, 5, 0, Math.PI * 2); ctx.fill();
+    const drinkX = unicornX + cellH * .68;
+    const drinkY = unicornY + cellH * .08;
+    const drinkSize = cellH * .42;
+    const cocktail = ctx.createLinearGradient(0, drinkY - drinkSize, 0, drinkY + drinkSize);
+    cocktail.addColorStop(0, "#fff49c");
+    cocktail.addColorStop(.55, "#f3d34f");
+    cocktail.addColorStop(1, "#d79b2f");
+    ctx.fillStyle = cocktail;
+    ctx.beginPath(); ctx.moveTo(drinkX - drinkSize * .62, drinkY - drinkSize * .62); ctx.lineTo(drinkX + drinkSize * .62, drinkY - drinkSize * .62); ctx.lineTo(drinkX + drinkSize * .34, drinkY + drinkSize * .72); ctx.lineTo(drinkX - drinkSize * .34, drinkY + drinkSize * .72); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,.9)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(drinkX, drinkY + drinkSize * .72); ctx.lineTo(drinkX, drinkY + drinkSize * 1.08); ctx.moveTo(drinkX - drinkSize * .44, drinkY + drinkSize * 1.08); ctx.lineTo(drinkX + drinkSize * .44, drinkY + drinkSize * 1.08); ctx.stroke();
+    ctx.strokeStyle = "#ef78b7";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(drinkX + drinkSize * .18, drinkY - drinkSize * .58); ctx.lineTo(drinkX + drinkSize * .74, drinkY - drinkSize * 1.42); ctx.stroke();
+    ctx.fillStyle = "#ef78b7";
+    ctx.beginPath(); ctx.moveTo(drinkX + drinkSize * .26, drinkY - drinkSize * 1.16); ctx.quadraticCurveTo(drinkX + drinkSize * .78, drinkY - drinkSize * 1.65, drinkX + drinkSize * 1.24, drinkY - drinkSize * 1.12); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#e6aa35";
+    ctx.beginPath(); ctx.arc(drinkX - drinkSize * .48, drinkY - drinkSize * .68, drinkSize * .27, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#4a9d49";
+    ctx.beginPath(); ctx.moveTo(drinkX - drinkSize * .5, drinkY - drinkSize * .88); ctx.lineTo(drinkX - drinkSize * .75, drinkY - drinkSize * 1.28); ctx.lineTo(drinkX - drinkSize * .34, drinkY - drinkSize * .94); ctx.fill();
     ctx.restore();
 
     ctx.fillStyle = "rgba(5,12,18,.82)";
@@ -1934,10 +2239,11 @@
   function drawTelemetry() {
     const pad = 10;
     const barW = Math.min(120, viewW * .2);
-    const maxTime = isMazeShift() ? Math.max(44, 68 - Math.floor(level / 4) * 3)
-      : isVesselShift() ? Math.max(52, 76 - Math.floor(level / 4) * 3)
-        : isLoadShift() ? Math.max(60, 92 - Math.floor(level / 4) * 3)
-          : Math.max(24, 46 - Math.floor(level / 4) * 2);
+    const maxTime = isMazeShift() ? Math.max(44, 68 - Math.floor(level / 5) * 3)
+      : isVesselShift() ? Math.max(52, 76 - Math.floor(level / 5) * 3)
+        : isLoadShift() ? Math.max(60, 92 - Math.floor(level / 5) * 3)
+          : isBridgeShift() ? Math.max(70, 120 - Math.floor(level / 5) * 4)
+            : Math.max(24, 46 - Math.floor(level / 5) * 2);
     const ratio = timeLeft / maxTime;
     ctx.fillStyle = "rgba(5,14,17,.74)";
     ctx.fillRect(viewW - barW - pad * 2, pad, barW + pad, 16);
@@ -1946,7 +2252,7 @@
     ctx.fillStyle = "#9aadb0";
     ctx.font = "7px IBM Plex Mono";
     ctx.textAlign = "right";
-    const label = isVesselShift() ? "INSPECTION" : isMazeShift() ? "SHIFT" : isLoadShift() ? "LOAD WINDOW" : "TIDE";
+    const label = isVesselShift() ? "INSPECTION" : isMazeShift() ? "SHIFT" : isLoadShift() ? "LOAD WINDOW" : isBridgeShift() ? "WATCH" : "TIDE";
     ctx.fillText(`${label} ${Math.ceil(timeLeft)}s`, viewW - pad, pad + 8);
   }
 
@@ -2057,6 +2363,8 @@
     if (soundOn) ensureAudio();
     else if (audioContext?.state === "running") audioContext.suspend();
   });
+  smokeButton.addEventListener("click", useSmoke);
+  drinkButton.addEventListener("click", useDrink);
   document.querySelectorAll("[data-dir]").forEach(button => {
     button.addEventListener("pointerdown", event => { event.preventDefault(); move(button.dataset.dir); });
     button.addEventListener("pointerup", () => platformControl(button.dataset.dir, false));

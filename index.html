@@ -37,6 +37,7 @@
               <option value="2">02 · MAZE</option>
               <option value="3">03 · VESSEL</option>
               <option value="4">04 · LOAD PLAN</option>
+              <option value="5">05 · BRIDGE SIM</option>
             </select>
           </label>
           <button id="pauseButton" class="pause-button" aria-label="Pause game"><span></span><span></span></button>
@@ -61,6 +62,11 @@
               <p id="pauseMessage">The terminal is holding.</p>
               <button id="resumeButton" class="primary-button"><span>RESUME</span><b>P</b></button>
             </div>
+          </div>
+          <div id="bridgeControls" class="bridge-controls hidden" aria-label="Vessel bridge controls">
+            <div><small>BRIDGE ACTIONS</small><strong id="bridgeCondition">SOBER · CLEAR</strong></div>
+            <button id="smokeButton" type="button">SMOKE</button>
+            <button id="drinkButton" type="button">DRINK</button>
           </div>
         </div>
 
