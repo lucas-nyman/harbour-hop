@@ -14,10 +14,6 @@
   const pauseTitle = document.getElementById("pauseTitle");
   const pauseMessage = document.getElementById("pauseMessage");
   const actionButton = document.querySelector("[data-action='fire']");
-  const bridgeControls = document.getElementById("bridgeControls");
-  const bridgeCondition = document.getElementById("bridgeCondition");
-  const smokeButton = document.getElementById("smokeButton");
-  const drinkButton = document.getElementById("drinkButton");
   const soundButton = document.getElementById("soundButton");
 
   const COLS = 11;
@@ -69,15 +65,18 @@
   let sailAway = 0;
   let loadMessage = "FIND THE MANIFEST CARGO";
   let camera = { x: 5.5, y: 6.5, zoom: 1.35 };
-  let bridge = { rudder: 0, throttle: .45, speed: 0, lateral: 0, distance: 0, smoke: 0, drink: 0, roll: 0 };
+  let mood = "neutral";
+  let moodTimer = 0;
+  let personalityClock = 5;
+  let moveCount = 0;
+  let rainbowFarts = [];
 
   const cellIndex = (col, row) => row * COLS + col;
-  const shiftType = () => ["bridge", "traffic", "maze", "vessel", "load"][level % 5];
+  const shiftType = () => ["load", "traffic", "maze", "vessel"][level % 4];
   const isTrafficShift = () => shiftType() === "traffic";
   const isMazeShift = () => shiftType() === "maze";
   const isVesselShift = () => shiftType() === "vessel";
   const isLoadShift = () => shiftType() === "load";
-  const isBridgeShift = () => shiftType() === "bridge";
   const CARDINALS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
   const cargoCatalog = [
     { id: "beer", name: "BEER", clue: "KEG / AMBER / 480KG", color: "#e4aa31", mark: "B" },
@@ -93,8 +92,7 @@
     traffic: { tempo: .25, bass: [110, 110, 130.81, 98, 110, 146.83, 130.81, 98], lead: [220, 261.63, 293.66, 329.63, 293.66, 261.63, 246.94, 196] },
     maze: { tempo: .29, bass: [82.41, 98, 110, 82.41, 73.42, 98, 103.83, 73.42], lead: [164.81, 196, 220, 246.94, 220, 196, 174.61, 146.83] },
     vessel: { tempo: .31, bass: [73.42, 73.42, 98, 110, 73.42, 130.81, 110, 98], lead: [293.66, 349.23, 392, 440, 392, 349.23, 329.63, 293.66] },
-    load: { tempo: .27, bass: [130.81, 164.81, 196, 164.81, 146.83, 174.61, 220, 174.61], lead: [523.25, 659.25, 783.99, 659.25, 587.33, 698.46, 880, 698.46] },
-    bridge: { tempo: .34, bass: [55, 73.42, 82.41, 73.42, 61.74, 82.41, 98, 82.41], lead: [220, 293.66, 329.63, 293.66, 246.94, 329.63, 392, 329.63] }
+    load: { tempo: .27, bass: [130.81, 164.81, 196, 164.81, 146.83, 174.61, 220, 174.61], lead: [523.25, 659.25, 783.99, 659.25, 587.33, 698.46, 880, 698.46] }
   };
   const photoSources = {
     terminal: "https://images.unsplash.com/photo-1494412651409-8963ce7935a7?auto=format&fit=crop&w=1800&q=82",
@@ -268,38 +266,6 @@
     loadMessage = "FIND THE THREE MANIFEST ITEMS";
     player.facing = "up";
   }
-  function initBridge() {
-    bridge = { rudder: 0, throttle: .45, speed: 0, lateral: 0, distance: 0, smoke: 0, drink: 0, roll: 0 };
-    bridgeCondition.textContent = "SOBER · CLEAR";
-  }
-
-  function bridgeControl(direction) {
-    if (!isBridgeShift() || paused) return;
-    if (direction === "left") bridge.rudder = Math.max(-1, bridge.rudder - .22);
-    if (direction === "right") bridge.rudder = Math.min(1, bridge.rudder + .22);
-    if (direction === "up") bridge.throttle = Math.min(1, bridge.throttle + .1);
-    if (direction === "down") bridge.throttle = Math.max(0, bridge.throttle - .1);
-    playTone(155 + bridge.throttle * 90, .035, "square", .012);
-  }
-
-  function useSmoke() {
-    if (!running || paused || !isBridgeShift()) return;
-    bridge.smoke = Math.min(1, bridge.smoke + .62);
-    score = Math.max(0, score - 25);
-    playNoise(.5, .01, 420);
-    updateHud();
-  }
-
-  function useDrink() {
-    if (!running || paused || !isBridgeShift()) return;
-    bridge.drink = Math.min(1, bridge.drink + .72);
-    score = Math.max(0, score - 50);
-    playTone(440, .08, "sine", .015);
-    playTone(660, .12, "sine", .012, .08);
-    updateHud();
-  }
-
-
   function setupLevel() {
     resetPlayer();
     vehicles = [];
@@ -316,23 +282,19 @@
     if (isMazeShift()) {
       generateMaze();
       initMazeHazards();
-      timeLeft = Math.max(44, 68 - Math.floor(level / 5) * 3);
+      timeLeft = Math.max(44, 68 - Math.floor(level / 4) * 3);
     } else if (isVesselShift()) {
       mazeWalls.fill(0);
       initPlatformer();
-      timeLeft = Math.max(52, 76 - Math.floor(level / 5) * 3);
+      timeLeft = Math.max(52, 76 - Math.floor(level / 4) * 3);
     } else if (isLoadShift()) {
       mazeWalls.fill(0);
       initLoadPuzzle();
-      timeLeft = Math.max(60, 92 - Math.floor(level / 5) * 3);
-    } else if (isBridgeShift()) {
-      mazeWalls.fill(0);
-      initBridge();
-      timeLeft = Math.max(70, 120 - Math.floor(level / 5) * 4);
+      timeLeft = Math.max(60, 92 - Math.floor(level / 4) * 3);
     } else {
       mazeWalls.fill(0);
       initVehicles();
-      timeLeft = Math.max(24, 46 - Math.floor(level / 5) * 2);
+      timeLeft = Math.max(24, 46 - Math.floor(level / 4) * 2);
     }
     updateHud();
     updateCamera(0, true);
@@ -427,6 +389,13 @@
     lives = 3;
     gameOver = false;
     paused = false;
+    mood = "neutral";
+    moodTimer = 0;
+    personalityClock = 4 + Math.random() * 3;
+    moveCount = 0;
+    rainbowFarts = [];
+    canvas.dataset.campaign = "active";
+    canvas.dataset.mood = mood;
     running = true;
     particles = [];
     musicStep = 0;
@@ -447,6 +416,7 @@
     bestEl.textContent = String(best).padStart(6, "0");
     canvas.dataset.shift = String(level);
     canvas.dataset.mode = shiftType();
+    canvas.dataset.player = `${player.targetCol},${player.targetRow}`;
     canvas.dataset.manifests = `${mazeManifests.filter(manifest => manifest.collected).length}/${mazeManifests.length}`;
     canvas.dataset.loadPlan = loadPlan.map(item => `${item.name}:${item.loaded ? "loaded" : "needed"}`).join("|");
     canvas.dataset.cargo = cargoItems.filter(item => !item.loaded).map(item => `${item.name}@${item.col},${item.row}`).join("|");
@@ -455,14 +425,11 @@
       traffic: `Shift ${level}: live terminal traffic. Use arrow keys or WASD to cross.`,
       maze: `Shift ${level}: container maze with dock workers. Collect every manifest and reach the north checkpoint.`,
       vessel: `Shift ${level}: vessel platformer. Jump with up or W and fire dangerous-goods magic with Space or F.`,
-      load: `Shift ${level}: stowage puzzle. Fit the pictured cargo pieces into vessel bays in numbered order.`,
-      bridge: `Shift ${level}: three-dimensional vessel bridge simulator. Steer with left and right; control throttle with up and down.`
+      load: `Shift ${level}: stowage puzzle. Fit the pictured cargo pieces into vessel bays in numbered order.`
     };
     canvas.setAttribute("aria-label", labels[shiftType()]);
     actionButton.textContent = isLoadShift() ? "FIT" : "FIRE";
     actionButton.setAttribute("aria-label", isLoadShift() ? "Fit cargo puzzle piece" : "Fire dangerous-goods magic stun");
-    bridgeControls.classList.toggle("hidden", !isBridgeShift());
-    bridgeCondition.textContent = bridge.drink > .05 ? "IMPAIRED · UNSTABLE" : bridge.smoke > .05 ? "SMOKE · LOW VIS" : "SOBER · CLEAR";
   }
 
   function togglePause(force) {
@@ -475,6 +442,11 @@
   }
 
   function finishGame() {
+    mood = "neutral";
+    moodTimer = 0;
+    personalityClock = 4 + Math.random() * 3;
+    moveCount = 0;
+    rainbowFarts = [];
     gameOver = true;
     paused = true;
     best = Math.max(best, score);
@@ -486,13 +458,27 @@
     pauseOverlay.classList.remove("hidden");
     playTone(110, .3, "sawtooth", .035);
   }
+  function finishCampaign() {
+    gameOver = true;
+    paused = true;
+    running = false;
+    best = Math.max(best, score);
+    localStorage.setItem("harborHopBest", String(best));
+    canvas.dataset.campaign = "complete";
+    levelSelector.value = "1";
+    setMood("laugh", 10);
+    updateHud();
+    pauseTitle.textContent = "VOYAGE COMPLETE";
+    pauseMessage.textContent = `All four shifts cleared. MV Unicorn Star sailed with a score of ${String(score).padStart(6, "0")}.`;
+    document.getElementById("resumeButton").innerHTML = "<span>SAIL AGAIN</span><b>ENTER ↵</b>";
+    pauseOverlay.classList.remove("hidden");
+    playTone(523.25, .16, "triangle", .035);
+    playTone(659.25, .2, "triangle", .03, .14);
+    playTone(783.99, .34, "triangle", .028, .3);
+  }
 
   function move(direction) {
     if (!running || paused || (isLoadShift() && loadComplete)) return;
-    if (isBridgeShift()) {
-      bridgeControl(direction);
-      return;
-    }
     if (isVesselShift()) {
       platformControl(direction, true);
       return;
@@ -511,6 +497,9 @@
     player.targetRow = nextRow;
     player.moving = 1;
     player.facing = direction;
+    moveCount++;
+    if (moveCount % 4 === 0) emitRainbowFart();
+    if (moveCount % 9 === 0) setMood("laugh", 1.2);
     score += direction === "up" ? 20 : 5;
     updateHud();
     playTone(240 + (12 - nextRow) * 15, .035, "square", .018);
@@ -519,10 +508,10 @@
   function hitPlayer() {
     if (flash > 0 || boardingProgress > 0) return;
     const respawnVessel = isVesselShift();
-    const respawnBridge = isBridgeShift();
     lives--;
     shake = .35;
     flash = .8;
+    setMood("cry", 2.4);
     const hitX = isVesselShift() ? platformPlayer.x : player.col + .5;
     const hitY = isVesselShift() ? platformPlayer.y : player.row + .5;
     burst(hitX, hitY, COLORS.pink, 14);
@@ -540,7 +529,6 @@
           projectiles = [];
           boardingProgress = 0;
         }
-        if (respawnBridge) initBridge();
       }, 360);
       updateHud();
     }
@@ -551,10 +539,11 @@
     const goalX = isVesselShift() ? platformPlayer.x : player.col + .5;
     const goalY = isVesselShift() ? platformPlayer.y : player.row + .5;
     burst(goalX, goalY, COLORS.cyan, 26);
+    setMood("laugh", 2.2);
     playTone(540, .06, "square", .035);
     playTone(720, .12, "square", .035, .08);
     level++;
-    if (level % 5 === 1) lives = Math.min(4, lives + 1);
+    if (level % 4 === 1) lives = Math.min(4, lives + 1);
     best = Math.max(best, score);
     localStorage.setItem("harborHopBest", String(best));
     setupLevel();
@@ -564,15 +553,13 @@
       traffic: "Traffic density has increased. Cross the live terminal again.",
       maze: "Collect all three manifests while angry dock workers patrol the container maze.",
       vessel: "Board the vessel. Your GMR is incorrect and a terror mark has triggered a Home Office inspection.",
-      load: "Build the vessel load plan. Fit the pictured cargo pieces into numbered bays in the correct order.",
-      bridge: "Take the helm of MV Unicorn Star and keep the vessel inside the buoyed channel."
+      load: "Build the vessel load plan. Fit the pictured cargo pieces into numbered bays in the correct order."
     };
     const buttons = {
       traffic: "START SHIFT",
       maze: "ENTER MAZE",
       vessel: "BOARD VESSEL",
-      load: "OPEN STOWAGE PUZZLE",
-      bridge: "TAKE THE HELM"
+      load: "OPEN STOWAGE PUZZLE"
     };
     pauseMessage.textContent = messages[shiftType()];
     document.getElementById("resumeButton").innerHTML = `<span>${buttons[shiftType()]}</span><b>ENTER ↵</b>`;
@@ -589,6 +576,8 @@
     if (direction === "right") { platformMove = 1; player.facing = "right"; }
     if (direction === "up" && platformPlayer.grounded) {
       platformPlayer.vy = -8.7;
+      moveCount++;
+      if (moveCount % 3 === 0) emitRainbowFart();
       platformPlayer.grounded = false;
       playTone(360, .06, "square", .022);
     }
@@ -606,6 +595,7 @@
     fireCooldown = .28;
     playTone(610, .055, "sawtooth", .025);
     playNoise(.045, .012, 1900);
+    setMood("angry", 1.1);
   }
   function interactCargo() {
     if (!isLoadShift() || player.moving > 0 || loadComplete) return;
@@ -623,6 +613,7 @@
       loadPlan.forEach(item => { item.loaded = false; });
       cargoItems.forEach(item => { item.loaded = false; });
       loadMessage = `${cargo.name} DOES NOT FIT BAY ${expectedBay} // STOWAGE RESET`;
+      setMood("angry", 1.8);
       playTone(82, .18, "sawtooth", .04);
       playNoise(.18, .025, 260);
       updateHud();
@@ -633,6 +624,7 @@
     score += 600;
     const bayNumber = loadPlan.findIndex(item => item.id === cargo.id) + 1;
     loadMessage = `${cargo.name} LOCKED INTO BAY ${bayNumber}`;
+    setMood("laugh", .9);
     burst(cargo.col + .5, cargo.row + .5, cargo.color, 20);
     playTone(620, .06, "square", .028);
     playTone(820, .1, "square", .024, .07);
@@ -641,6 +633,7 @@
       score += 1800;
       loadComplete = true;
       sailAway = .001;
+      setMood("laugh", 10);
       loadMessage = "STOWAGE SOLVED // PINACOLADA SERVED";
     }
     updateHud();
@@ -782,25 +775,7 @@
     if (!loadComplete) return;
     sailAway += dt;
     canvas.dataset.sailAway = sailAway.toFixed(2);
-    if (sailAway >= 4.2) reachGoal();
-  }
-  function updateBridge(dt) {
-    bridge.smoke = Math.max(0, bridge.smoke - dt * .055);
-    bridge.drink = Math.max(0, bridge.drink - dt * .035);
-    const targetSpeed = bridge.throttle * 18;
-    bridge.speed += (targetSpeed - bridge.speed) * Math.min(1, dt * .7);
-    const impairedDrift = Math.sin(performance.now() / 410) * bridge.drink * .42;
-    bridge.lateral += (bridge.rudder * .48 + impairedDrift) * (bridge.speed / 12) * dt;
-    bridge.distance += bridge.speed * dt * .42;
-    bridge.roll += ((bridge.rudder * .045 + impairedDrift * .06) - bridge.roll) * Math.min(1, dt * 3.2);
-    bridge.rudder *= Math.max(0, 1 - dt * .08);
-    bridgeCondition.textContent = bridge.drink > .05 ? "IMPAIRED · UNSTABLE" : bridge.smoke > .05 ? "SMOKE · LOW VIS" : "SOBER · CLEAR";
-    canvas.dataset.bridge = `${bridge.distance.toFixed(1)}m|${bridge.speed.toFixed(1)}kn|${bridge.lateral.toFixed(2)}|${bridge.smoke.toFixed(2)}|${bridge.drink.toFixed(2)}`;
-    if (Math.abs(bridge.lateral) > 1.35) {
-      bridge.lateral = Math.sign(bridge.lateral) * 1.35;
-      hitPlayer();
-    }
-    if (bridge.distance >= 120) reachGoal();
+    if (sailAway >= 4.2) finishCampaign();
   }
 
 
@@ -810,15 +785,14 @@
     if (timeLeft <= 0 && !(isLoadShift() && loadComplete) && boardingProgress === 0) {
       timeLeft = 0;
       hitPlayer();
-      timeLeft = isMazeShift() ? Math.max(44, 68 - Math.floor(level / 5) * 3)
-        : isVesselShift() ? Math.max(52, 76 - Math.floor(level / 5) * 3)
-          : isLoadShift() ? Math.max(60, 92 - Math.floor(level / 5) * 3)
-            : isBridgeShift() ? Math.max(70, 120 - Math.floor(level / 5) * 4)
-              : Math.max(24, 46 - Math.floor(level / 5) * 2);
+      timeLeft = isMazeShift() ? Math.max(44, 68 - Math.floor(level / 4) * 3)
+        : isVesselShift() ? Math.max(52, 76 - Math.floor(level / 4) * 3)
+          : isLoadShift() ? Math.max(60, 92 - Math.floor(level / 4) * 3)
+            : Math.max(24, 46 - Math.floor(level / 4) * 2);
     }
 
     if (isTrafficShift()) {
-      const levelSpeed = 1 + Math.floor(level / 5) * .12;
+      const levelSpeed = 1 + Math.floor(level / 4) * .12;
       vehicles.forEach(vehicle => {
         vehicle.x += vehicle.speed * vehicle.dir * levelSpeed * dt;
         if (vehicle.dir > 0 && vehicle.x > COLS + vehicle.length) vehicle.x = -vehicle.length;
@@ -828,11 +802,9 @@
       updatePlatformer(dt);
     } else if (isLoadShift()) {
       updateLoadPuzzle(dt);
-    } else if (isBridgeShift()) {
-      updateBridge(dt);
     }
 
-    if (!isVesselShift() && !isBridgeShift() && player.moving > 0) {
+    if (!isVesselShift() && player.moving > 0) {
       player.moving = Math.max(0, player.moving - dt * 7.5);
       if (player.moving === 0) {
         player.col = player.targetCol;
@@ -870,12 +842,65 @@
       updateDockWorkers(dt);
     }
 
+    moodTimer = Math.max(0, moodTimer - dt);
+    if (moodTimer === 0 && mood !== "neutral") {
+      mood = "neutral";
+      canvas.dataset.mood = mood;
+    }
+    personalityClock -= dt;
+    if (personalityClock <= 0 && mood === "neutral") {
+      const moods = ["laugh", "cry", "angry"];
+      setMood(moods[Math.floor(Math.random() * moods.length)], 1.25);
+      personalityClock = 6 + Math.random() * 5;
+    }
     updateMusic(dt);
     particles.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 1.7 * dt; p.life -= dt; });
     particles = particles.filter(p => p.life > 0);
+    rainbowFarts.forEach(fart => { fart.x += fart.vx * dt; fart.y += fart.vy * dt; fart.life -= dt; });
+    rainbowFarts = rainbowFarts.filter(fart => fart.life > 0);
+    canvas.dataset.rainbowFarts = String(rainbowFarts.length);
     shake = Math.max(0, shake - dt);
     flash = Math.max(0, flash - dt);
     updateCamera(dt);
+  }
+
+  function setMood(nextMood, duration) {
+    mood = nextMood;
+    moodTimer = duration;
+    canvas.dataset.mood = mood;
+  }
+
+  function emitRainbowFart() {
+    const position = isVesselShift()
+      ? { x: platformPlayer.x, y: platformPlayer.y }
+      : cameraTarget();
+    const behind = {
+      up: [0, .32], down: [0, -.32], left: [.32, 0], right: [-.32, 0]
+    }[player.facing] || [0, .32];
+    const colors = ["#ff5148", "#ffad31", "#ffe75a", "#55dc76", "#42dfe5", "#8d72ec", "#ef78b7"];
+    colors.forEach((color, index) => {
+      rainbowFarts.push({
+        x: position.x + behind[0] + (Math.random() - .5) * .08,
+        y: position.y + behind[1] + (index - 3) * .035,
+        vx: behind[0] * 1.8 + (Math.random() - .5) * .25,
+        vy: behind[1] * 1.8 - .2 + (Math.random() - .5) * .18,
+        life: 1.15,
+        color,
+        size: 5 + Math.random() * 4
+      });
+    });
+    playTone(72, .08, "sawtooth", .012);
+  }
+
+  function drawRainbowFarts() {
+    rainbowFarts.forEach(fart => {
+      ctx.globalAlpha = Math.max(0, fart.life / 1.15);
+      ctx.fillStyle = fart.color;
+      ctx.beginPath();
+      ctx.ellipse(fart.x * cellW, fart.y * cellH, fart.size, fart.size * .56, 0, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
   }
 
   function burst(x, y, color, count) {
@@ -890,201 +915,32 @@
     ctx.clearRect(0, 0, viewW, viewH);
     ctx.fillStyle = "#020a0f";
     ctx.fillRect(0, 0, viewW, viewH);
-    if (isBridgeShift()) {
-      ctx.save();
-      ctx.translate(viewW / 2, viewH / 2);
-      ctx.rotate(bridge.roll);
-      ctx.translate(-viewW / 2, -viewH / 2);
-      drawBridge3D();
-      ctx.restore();
-      drawCameraFrame();
-      drawTelemetry();
+    ctx.save();
+    if (shake > 0) ctx.translate((Math.random() - .5) * 8 * shake, (Math.random() - .5) * 8 * shake);
+    applyCamera();
+    if (isMazeShift()) {
+      drawMaze();
+      drawDockWorkers();
+    } else if (isVesselShift()) {
+      drawVessel();
+    } else if (isLoadShift()) {
+      drawLoadPuzzle();
     } else {
-      ctx.save();
-      if (shake > 0) ctx.translate((Math.random() - .5) * 8 * shake, (Math.random() - .5) * 8 * shake);
-      applyCamera();
-      if (isMazeShift()) {
-        drawMaze();
-        drawDockWorkers();
-      } else if (isVesselShift()) {
-        drawVessel();
-      } else if (isLoadShift()) {
-        drawLoadPuzzle();
-      } else {
-        drawTerminal();
-        drawVehicles();
-      }
-      if (!(isLoadShift() && loadComplete)) drawPlayer();
-      drawParticles();
-      ctx.restore();
-      drawCameraFrame();
-      drawTelemetry();
+      drawTerminal();
+      drawVehicles();
     }
+    if (!(isLoadShift() && loadComplete)) drawPlayer();
+    drawRainbowFarts();
+    drawParticles();
+    ctx.restore();
+    drawCameraFrame();
+    drawTelemetry();
     if (flash > .5) {
       ctx.fillStyle = `rgba(255,91,75,${(flash - .5) * .22})`;
       ctx.fillRect(0, 0, viewW, viewH);
     }
   }
 
-  function drawBridge3D() {
-    const horizon = viewH * .43;
-    const vanishingX = viewW * .5 - bridge.lateral * viewW * .18 - bridge.rudder * viewW * .055;
-    const sky = ctx.createLinearGradient(0, 0, 0, viewH);
-    sky.addColorStop(0, "#173c55");
-    sky.addColorStop(.43, "#8fb5bd");
-    sky.addColorStop(.44, "#1d566b");
-    sky.addColorStop(1, "#062a3a");
-    ctx.fillStyle = sky;
-    ctx.fillRect(-80, -80, viewW + 160, viewH + 160);
-    drawPhotoBackdrop("ocean", .68);
-    ctx.fillStyle = "rgba(3,26,39,.34)";
-    ctx.fillRect(-80, horizon, viewW + 160, viewH - horizon + 80);
-
-    ctx.save();
-    ctx.globalAlpha = .68;
-    ctx.fillStyle = "#18252b";
-    ctx.beginPath();
-    ctx.moveTo(viewW * .72, horizon - 20);
-    ctx.lineTo(viewW * .94, horizon - 20);
-    ctx.lineTo(viewW * .91, horizon + 10);
-    ctx.lineTo(viewW * .74, horizon + 10);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#d9dfdb";
-    ctx.fillRect(viewW * .79, horizon - 48, viewW * .08, 28);
-    ctx.fillStyle = "#273b43";
-    ctx.fillRect(viewW * .81, horizon - 67, viewW * .018, 19);
-    ctx.strokeStyle = "#273b43";
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(viewW * .82, horizon - 67); ctx.lineTo(viewW * .82, horizon - 95); ctx.stroke();
-    ctx.restore();
-
-    const channelGradient = ctx.createLinearGradient(0, horizon, 0, viewH);
-    channelGradient.addColorStop(0, "rgba(52,145,157,.08)");
-    channelGradient.addColorStop(1, "rgba(42,211,202,.2)");
-    ctx.fillStyle = channelGradient;
-    ctx.beginPath();
-    ctx.moveTo(vanishingX - 8, horizon);
-    ctx.lineTo(vanishingX + 8, horizon);
-    ctx.lineTo(viewW * .96, viewH);
-    ctx.lineTo(viewW * .04, viewH);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = "rgba(126,234,223,.32)";
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(vanishingX, horizon); ctx.lineTo(viewW * .04, viewH); ctx.moveTo(vanishingX, horizon); ctx.lineTo(viewW * .96, viewH); ctx.stroke();
-
-    const travel = bridge.distance % 18;
-    for (let marker = 0; marker < 9; marker++) {
-      const depth = (marker * 18 - travel + 162) % 162;
-      const approach = 1 - depth / 162;
-      const perspective = approach * approach;
-      const y = horizon + perspective * (viewH - horizon) * .88;
-      const spread = 10 + perspective * viewW * .43;
-      const size = 3 + perspective * 22;
-      for (const side of [-1, 1]) {
-        const x = vanishingX + side * spread - bridge.lateral * perspective * viewW * .08;
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.shadowColor = side < 0 ? "#ef5a4d" : "#4ef1df";
-        ctx.shadowBlur = size * .8;
-        ctx.fillStyle = side < 0 ? "#d84439" : "#36cdbb";
-        ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(size * .55, size); ctx.lineTo(-size * .55, size); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = "#e8ece6";
-        ctx.fillRect(-size * .22, -size * .3, size * .44, size * .28);
-        ctx.restore();
-      }
-    }
-
-    ctx.strokeStyle = "rgba(210,239,235,.13)";
-    ctx.lineWidth = 1;
-    for (let wake = 0; wake < 12; wake++) {
-      const y = horizon + (wake / 12) ** 2 * (viewH - horizon);
-      const width = (wake / 12) * viewW * .5;
-      ctx.beginPath(); ctx.moveTo(viewW / 2 - width, y); ctx.quadraticCurveTo(viewW / 2, y + 12, viewW / 2 + width, y); ctx.stroke();
-    }
-
-    const metal = ctx.createLinearGradient(0, viewH * .68, 0, viewH);
-    metal.addColorStop(0, "#36454b"); metal.addColorStop(.25, "#101d22"); metal.addColorStop(1, "#050b0e");
-    ctx.fillStyle = metal;
-    ctx.beginPath(); ctx.moveTo(-40, viewH * .79); ctx.lineTo(viewW * .19, viewH * .67); ctx.lineTo(viewW * .81, viewH * .67); ctx.lineTo(viewW + 40, viewH * .79); ctx.lineTo(viewW + 40, viewH + 40); ctx.lineTo(-40, viewH + 40); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = "#52646a";
-    ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(viewW * .19, viewH * .67); ctx.lineTo(viewW * .81, viewH * .67); ctx.stroke();
-
-    ctx.fillStyle = "#05090b";
-    ctx.fillRect(0, 0, 24, viewH);
-    ctx.fillRect(viewW - 24, 0, 24, viewH);
-    ctx.fillRect(0, 0, viewW, 22);
-    ctx.strokeStyle = "#53676d";
-    ctx.lineWidth = 8;
-    ctx.beginPath(); ctx.moveTo(viewW * .18, 0); ctx.lineTo(viewW * .27, viewH * .68); ctx.moveTo(viewW * .82, 0); ctx.lineTo(viewW * .73, viewH * .68); ctx.stroke();
-
-    const wheelX = viewW * .5;
-    const wheelY = viewH * .83;
-    const wheelR = Math.min(viewW, viewH) * .105;
-    ctx.save();
-    ctx.translate(wheelX, wheelY);
-    ctx.rotate(bridge.rudder * .85);
-    ctx.strokeStyle = "#7a5737";
-    ctx.lineWidth = 13;
-    ctx.beginPath(); ctx.arc(0, 0, wheelR, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = "#b58a55";
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(0, 0, wheelR, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = "#8b683f";
-    ctx.lineWidth = 9;
-    for (let spoke = 0; spoke < 8; spoke++) {
-      const angle = spoke * Math.PI / 4;
-      ctx.beginPath(); ctx.moveTo(Math.cos(angle) * 12, Math.sin(angle) * 12); ctx.lineTo(Math.cos(angle) * (wheelR + 18), Math.sin(angle) * (wheelR + 18)); ctx.stroke();
-    }
-    ctx.fillStyle = "#b78b54";
-    ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-
-    ctx.fillStyle = "rgba(2,8,11,.9)";
-    ctx.beginPath(); ctx.roundRect(45, viewH * .76, 250, 120, 12); ctx.fill();
-    ctx.strokeStyle = "#486069"; ctx.lineWidth = 2; ctx.stroke();
-    const gauges = [
-      { x: 105, label: "SPEED", value: bridge.speed / 18, text: `${bridge.speed.toFixed(1)} kn` },
-      { x: 225, label: "RUDDER", value: (bridge.rudder + 1) / 2, text: `${Math.round(bridge.rudder * 35)}°` }
-    ];
-    gauges.forEach(gauge => {
-      const y = viewH * .82;
-      ctx.strokeStyle = "#789398"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(gauge.x, y, 35, Math.PI, Math.PI * 2); ctx.stroke();
-      const angle = Math.PI + gauge.value * Math.PI;
-      ctx.strokeStyle = COLORS.amber; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(gauge.x, y); ctx.lineTo(gauge.x + Math.cos(angle) * 29, y + Math.sin(angle) * 29); ctx.stroke();
-      ctx.fillStyle = "#d8e4e1"; ctx.font = "700 8px IBM Plex Mono"; ctx.textAlign = "center"; ctx.fillText(gauge.text, gauge.x, y + 22);
-      ctx.fillStyle = "#71878d"; ctx.font = "600 6px IBM Plex Mono"; ctx.fillText(gauge.label, gauge.x, y + 36);
-    });
-
-    ctx.fillStyle = "rgba(2,8,11,.92)";
-    ctx.beginPath(); ctx.roundRect(viewW - 305, viewH * .76, 260, 120, 12); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = COLORS.cyan; ctx.textAlign = "left"; ctx.font = "700 9px IBM Plex Mono";
-    ctx.fillText("MV UNICORN STAR // BRIDGE", viewW - 285, viewH * .79);
-    ctx.fillStyle = "#d8e4e1"; ctx.font = "800 19px IBM Plex Mono";
-    ctx.fillText(`${bridge.distance.toFixed(0)} / 120 m`, viewW - 285, viewH * .84);
-    ctx.fillStyle = Math.abs(bridge.lateral) > .8 ? COLORS.red : COLORS.cyan; ctx.font = "700 8px IBM Plex Mono";
-    ctx.fillText(`CHANNEL OFFSET ${bridge.lateral.toFixed(2)}`, viewW - 285, viewH * .88);
-    ctx.fillStyle = "#82979b"; ctx.font = "600 7px IBM Plex Mono";
-    ctx.fillText("ARROWS: RUDDER + THROTTLE", viewW - 285, viewH * .92);
-
-    ctx.fillStyle = "#f6f8f2";
-    ctx.beginPath(); ctx.ellipse(wheelX - 65, wheelY + 40, 28, 16, -.35, 0, Math.PI * 2); ctx.ellipse(wheelX + 65, wheelY + 40, 28, 16, .35, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = COLORS.pink; ctx.lineWidth = 6;
-    ctx.beginPath(); ctx.moveTo(wheelX - 85, wheelY + 54); ctx.lineTo(wheelX - 58, wheelY + 34); ctx.moveTo(wheelX + 85, wheelY + 54); ctx.lineTo(wheelX + 58, wheelY + 34); ctx.stroke();
-
-    if (bridge.smoke > 0) {
-      ctx.fillStyle = `rgba(205,211,206,${bridge.smoke * .23})`;
-      for (let cloud = 0; cloud < 13; cloud++) {
-        const x = viewW * .15 + ((cloud * 89 + performance.now() * .018) % (viewW * .7));
-        const y = viewH * .25 + Math.sin(cloud * 2.2) * 70;
-        ctx.beginPath(); ctx.arc(x, y, 42 + cloud % 4 * 14, 0, Math.PI * 2); ctx.fill();
-      }
-    }
-    if (bridge.drink > 0) {
-      ctx.fillStyle = `rgba(255,181,46,${bridge.drink * .055})`;
-      ctx.fillRect(0, 0, viewW, viewH);
-    }
-  }
 
   function drawTerminal() {
     const base = ctx.createLinearGradient(0, 0, 0, viewH);
@@ -1884,6 +1740,7 @@
     sunset.addColorStop(1, "#062731");
     ctx.fillStyle = sunset;
     ctx.fillRect(0, 0, viewW, viewH);
+    drawPhotoBackdrop("ocean", .48);
     ctx.fillStyle = "rgba(255,235,166,.9)";
     ctx.beginPath(); ctx.arc(viewW * .74, viewH * .3, cellH * .7, 0, Math.PI * 2); ctx.fill();
 
@@ -1899,58 +1756,109 @@
       ctx.stroke();
     }
 
-    const shipX = cellW * (1 + progress * 3.2);
-    const shipY = cellH * 6.1;
+    ctx.strokeStyle = "rgba(80,220,196,.5)";
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    for (let hump = 0; hump < 4; hump++) {
+      const x = cellW * (.5 + hump * .55);
+      const y = cellH * (8.25 + Math.sin(performance.now() / 310 + hump) * .08);
+      ctx.arc(x, y, cellH * .24, Math.PI, Math.PI * 2);
+    }
+    ctx.stroke();
+    ctx.fillStyle = "rgba(80,220,196,.58)";
+    ctx.beginPath(); ctx.arc(cellW * 2.55, cellH * 7.92, cellH * .15, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cellW * 2.56, cellH * 7.79); ctx.lineTo(cellW * 2.68, cellH * 7.6); ctx.lineTo(cellW * 2.7, cellH * 7.84); ctx.fill();
+
+    const shipX = cellW * (.35 + progress * 3.1);
+    const shipY = cellH * 6.25;
     ctx.save();
     ctx.translate(shipX, shipY);
-    ctx.fillStyle = "#102733";
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(cellW * 6.8, 0); ctx.lineTo(cellW * 5.9, cellH * 2.45); ctx.lineTo(cellW * .8, cellH * 2.45); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = "#72d7d4";
-    ctx.lineWidth = 3;
+    const wakeColors = ["#ff5148", "#ffad31", "#ffe75a", "#55dc76", "#42dfe5", "#8d72ec"];
+    wakeColors.forEach((color, index) => {
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = .42;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(cellW * .9, cellH * (2.05 + index * .055)); ctx.quadraticCurveTo(-cellW * .8, cellH * (2.2 + index * .08), -cellW * 2.1, cellH * (1.75 + index * .12)); ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+
+    const upperHull = ctx.createLinearGradient(0, 0, 0, cellH * 2.5);
+    upperHull.addColorStop(0, "#314b56"); upperHull.addColorStop(.55, "#142e3a"); upperHull.addColorStop(1, "#071a24");
+    ctx.fillStyle = upperHull;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(cellW * 6.45, 0); ctx.quadraticCurveTo(cellW * 7.15, cellH * .52, cellW * 5.98, cellH * 2.4); ctx.lineTo(cellW * .85, cellH * 2.4); ctx.quadraticCurveTo(cellW * .18, cellH * 1.7, 0, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#8c302e";
+    ctx.beginPath(); ctx.moveTo(cellW * .52, cellH * 1.65); ctx.lineTo(cellW * 6.37, cellH * 1.65); ctx.quadraticCurveTo(cellW * 6.25, cellH * 2.42, cellW * 5.98, cellH * 2.55); ctx.lineTo(cellW * .9, cellH * 2.55); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#d8d7c8";
+    ctx.fillRect(cellW * .35, cellH * 1.58, cellW * 6.05, 4);
+    ctx.strokeStyle = "rgba(154,194,195,.35)";
+    ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.fillStyle = "#e7ebe4";
-    ctx.fillRect(cellW * 3.9, -cellH * 1.25, cellW * 1.7, cellH * 1.25);
-    ctx.fillStyle = "#193846";
-    for (let port = 0; port < 4; port++) ctx.fillRect(cellW * (4.05 + port * .35), -cellH * .95, cellW * .2, cellH * .18);
+
+    const containerColors = ["#a94339", "#b4852f", "#2a7583", "#45665d"];
+    for (let cargo = 0; cargo < 7; cargo++) {
+      ctx.fillStyle = containerColors[cargo % containerColors.length];
+      const x = cellW * (.45 + cargo * .47);
+      const y = -cellH * (.38 + (cargo % 2) * .34);
+      ctx.fillRect(x, y, cellW * .43, cellH * .34);
+      ctx.strokeStyle = "rgba(0,0,0,.32)"; ctx.strokeRect(x, y, cellW * .43, cellH * .34);
+    }
+
+    ctx.fillStyle = "#edf0e8";
+    ctx.fillRect(cellW * 4.0, -cellH * 1.45, cellW * 1.55, cellH * 1.45);
+    ctx.fillStyle = "#183846";
+    for (let port = 0; port < 4; port++) ctx.fillRect(cellW * (4.12 + port * .31), -cellH * 1.18, cellW * .18, cellH * .17);
     ctx.fillStyle = "#26363b";
-    ctx.fillRect(cellW * 4.45, -cellH * 1.85, cellW * .4, cellH * .6);
+    ctx.fillRect(cellW * 4.48, -cellH * 2.02, cellW * .42, cellH * .58);
+    ctx.fillStyle = "#dc9d33";
+    ctx.fillRect(cellW * 4.52, -cellH * 1.88, cellW * .34, cellH * .1);
+    ctx.strokeStyle = "#cedbd7"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(cellW * 5.18, -cellH * 1.45); ctx.lineTo(cellW * 5.18, -cellH * 2.45); ctx.moveTo(cellW * 4.75, -cellH * 2.28); ctx.lineTo(cellW * 5.65, -cellH * 2.28); ctx.stroke();
     ctx.fillStyle = "#c6ddd8";
     ctx.font = `800 ${Math.max(15, cellH * .34)}px Arial Narrow, sans-serif`;
     ctx.textAlign = "center";
-    ctx.fillText("MV UNICORN STAR", cellW * 3.3, cellH * 1.25);
+    ctx.fillText("MV UNICORN STAR", cellW * 3.35, cellH * 1.15);
+    ctx.font = `600 ${Math.max(7, cellH * .14)}px IBM Plex Mono`;
+    ctx.fillText("LIVERPOOL · IMO 260904", cellW * 3.35, cellH * 1.43);
 
-    const unicornX = cellW * 4.5;
-    const unicornY = -cellH * 1.45;
+    const unicornX = cellW * 4.62;
+    const unicornY = -cellH * 1.62;
     ctx.fillStyle = "#f8ffff";
-    ctx.beginPath(); ctx.ellipse(unicornX, unicornY, cellH * .27, cellH * .2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(unicornX, unicornY + cellH * .18, cellH * .26, cellH * .34, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(unicornX, unicornY - cellH * .1, cellH * .24, cellH * .21, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = COLORS.pink;
-    ctx.beginPath(); ctx.moveTo(unicornX, unicornY - cellH * .18); ctx.lineTo(unicornX + cellH * .06, unicornY - cellH * .48); ctx.lineTo(unicornX + cellH * .12, unicornY - cellH * .16); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(unicornX, unicornY - cellH * .28); ctx.lineTo(unicornX + cellH * .06, unicornY - cellH * .61); ctx.lineTo(unicornX + cellH * .13, unicornY - cellH * .26); ctx.fill();
     ctx.strokeStyle = COLORS.cyan;
-    ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(unicornX - cellH * .2, unicornY); ctx.quadraticCurveTo(unicornX - cellH * .45, unicornY + cellH * .12, unicornX - cellH * .34, unicornY + cellH * .28); ctx.stroke();
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(unicornX - cellH * .2, unicornY + cellH * .12); ctx.quadraticCurveTo(unicornX - cellH * .48, unicornY + cellH * .22, unicornX - cellH * .36, unicornY + cellH * .42); ctx.stroke();
+    ctx.fillStyle = "#071116"; ctx.beginPath(); ctx.arc(unicornX - cellH * .075, unicornY - cellH * .1, 2, 0, Math.PI * 2); ctx.arc(unicornX + cellH * .075, unicornY - cellH * .1, 2, 0, Math.PI * 2); ctx.fill();
 
-    const drinkX = unicornX + cellH * .68;
-    const drinkY = unicornY + cellH * .08;
-    const drinkSize = cellH * .42;
+    const waveAngle = -.8 + Math.sin(performance.now() / 150) * .55;
+    ctx.save();
+    ctx.translate(unicornX + cellH * .18, unicornY + cellH * .08);
+    ctx.rotate(waveAngle);
+    ctx.strokeStyle = "#f8ffff";
+    ctx.lineWidth = cellH * .12;
+    ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(cellH * .44, 0); ctx.stroke();
+    ctx.fillStyle = "#36ded6";
+    ctx.beginPath(); ctx.arc(cellH * .46, 0, cellH * .085, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    const drinkX = unicornX + cellH * 1.18;
+    const drinkY = unicornY + cellH * .18;
+    const drinkSize = cellH * 1.12;
     const cocktail = ctx.createLinearGradient(0, drinkY - drinkSize, 0, drinkY + drinkSize);
-    cocktail.addColorStop(0, "#fff49c");
-    cocktail.addColorStop(.55, "#f3d34f");
-    cocktail.addColorStop(1, "#d79b2f");
+    cocktail.addColorStop(0, "#fff49c"); cocktail.addColorStop(.55, "#f3d34f"); cocktail.addColorStop(1, "#d79b2f");
     ctx.fillStyle = cocktail;
     ctx.beginPath(); ctx.moveTo(drinkX - drinkSize * .62, drinkY - drinkSize * .62); ctx.lineTo(drinkX + drinkSize * .62, drinkY - drinkSize * .62); ctx.lineTo(drinkX + drinkSize * .34, drinkY + drinkSize * .72); ctx.lineTo(drinkX - drinkSize * .34, drinkY + drinkSize * .72); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,.9)";
-    ctx.lineWidth = 3;
-    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,.95)"; ctx.lineWidth = 4; ctx.stroke();
     ctx.beginPath(); ctx.moveTo(drinkX, drinkY + drinkSize * .72); ctx.lineTo(drinkX, drinkY + drinkSize * 1.08); ctx.moveTo(drinkX - drinkSize * .44, drinkY + drinkSize * 1.08); ctx.lineTo(drinkX + drinkSize * .44, drinkY + drinkSize * 1.08); ctx.stroke();
-    ctx.strokeStyle = "#ef78b7";
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#ef78b7"; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.moveTo(drinkX + drinkSize * .18, drinkY - drinkSize * .58); ctx.lineTo(drinkX + drinkSize * .74, drinkY - drinkSize * 1.42); ctx.stroke();
     ctx.fillStyle = "#ef78b7";
     ctx.beginPath(); ctx.moveTo(drinkX + drinkSize * .26, drinkY - drinkSize * 1.16); ctx.quadraticCurveTo(drinkX + drinkSize * .78, drinkY - drinkSize * 1.65, drinkX + drinkSize * 1.24, drinkY - drinkSize * 1.12); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#e6aa35";
-    ctx.beginPath(); ctx.arc(drinkX - drinkSize * .48, drinkY - drinkSize * .68, drinkSize * .27, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#4a9d49";
-    ctx.beginPath(); ctx.moveTo(drinkX - drinkSize * .5, drinkY - drinkSize * .88); ctx.lineTo(drinkX - drinkSize * .75, drinkY - drinkSize * 1.28); ctx.lineTo(drinkX - drinkSize * .34, drinkY - drinkSize * .94); ctx.fill();
+    ctx.fillStyle = "#e6aa35"; ctx.beginPath(); ctx.arc(drinkX - drinkSize * .48, drinkY - drinkSize * .68, drinkSize * .27, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#4a9d49"; ctx.beginPath(); ctx.moveTo(drinkX - drinkSize * .5, drinkY - drinkSize * .88); ctx.lineTo(drinkX - drinkSize * .75, drinkY - drinkSize * 1.28); ctx.lineTo(drinkX - drinkSize * .34, drinkY - drinkSize * .94); ctx.fill();
     ctx.restore();
 
     ctx.fillStyle = "rgba(5,12,18,.82)";
@@ -2200,11 +2108,11 @@
     ctx.shadowBlur = 0;
 
     ctx.strokeStyle = "#071116";
-    ctx.lineWidth = blink ? s * .025 : s * .01;
+    ctx.lineWidth = blink || mood === "laugh" ? s * .025 : s * .01;
     ctx.beginPath();
-    if (blink) {
-      ctx.moveTo(-s * .11, -s * .26); ctx.lineTo(-s * .045, -s * .26);
-      ctx.moveTo(s * .045, -s * .26); ctx.lineTo(s * .11, -s * .26);
+    if (blink || mood === "laugh") {
+      ctx.moveTo(-s * .11, -s * .26); ctx.quadraticCurveTo(-s * .078, -s * .29, -s * .045, -s * .26);
+      ctx.moveTo(s * .045, -s * .26); ctx.quadraticCurveTo(s * .078, -s * .29, s * .11, -s * .26);
       ctx.stroke();
     } else {
       ctx.fillStyle = "#071116";
@@ -2212,11 +2120,29 @@
       ctx.fillStyle = "#5cf1ea";
       ctx.beginPath(); ctx.arc(-s * .068, -s * .271, s * .011, 0, Math.PI * 2); ctx.arc(s * .088, -s * .271, s * .011, 0, Math.PI * 2); ctx.fill();
     }
+    if (mood === "angry") {
+      ctx.strokeStyle = "#79282e";
+      ctx.lineWidth = s * .035;
+      ctx.beginPath(); ctx.moveTo(-s * .15, -s * .34); ctx.lineTo(-s * .035, -s * .29); ctx.moveTo(s * .15, -s * .34); ctx.lineTo(s * .035, -s * .29); ctx.stroke();
+    }
+    if (mood === "cry") {
+      ctx.fillStyle = "#42dfe5";
+      ctx.beginPath(); ctx.ellipse(-s * .085, -s * .18, s * .022, s * .075, 0, 0, Math.PI * 2); ctx.ellipse(s * .085, -s * .18, s * .022, s * .075, 0, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.fillStyle = "#e382ad";
     ctx.beginPath(); ctx.ellipse(0, -s * .17, s * .045, s * .025, 0, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = "#8b4a67";
-    ctx.lineWidth = 1.4;
-    ctx.beginPath(); ctx.arc(0, -s * .13, s * .06, .15, Math.PI - .15); ctx.stroke();
+    ctx.lineWidth = 1.5;
+    if (mood === "laugh") {
+      ctx.fillStyle = "#9d4267";
+      ctx.beginPath(); ctx.ellipse(0, -s * .105, s * .07, s * .065, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.fillRect(-s * .045, -s * .145, s * .09, s * .025);
+    } else {
+      ctx.beginPath();
+      if (mood === "cry" || mood === "angry") ctx.arc(0, -s * .075, s * .06, Math.PI + .15, Math.PI * 2 - .15);
+      else ctx.arc(0, -s * .13, s * .06, .15, Math.PI - .15);
+      ctx.stroke();
+    }
 
     ctx.fillStyle = "#36ded6";
     ctx.shadowColor = "rgba(57,225,219,.65)";
@@ -2239,11 +2165,10 @@
   function drawTelemetry() {
     const pad = 10;
     const barW = Math.min(120, viewW * .2);
-    const maxTime = isMazeShift() ? Math.max(44, 68 - Math.floor(level / 5) * 3)
-      : isVesselShift() ? Math.max(52, 76 - Math.floor(level / 5) * 3)
-        : isLoadShift() ? Math.max(60, 92 - Math.floor(level / 5) * 3)
-          : isBridgeShift() ? Math.max(70, 120 - Math.floor(level / 5) * 4)
-            : Math.max(24, 46 - Math.floor(level / 5) * 2);
+    const maxTime = isMazeShift() ? Math.max(44, 68 - Math.floor(level / 4) * 3)
+      : isVesselShift() ? Math.max(52, 76 - Math.floor(level / 4) * 3)
+        : isLoadShift() ? Math.max(60, 92 - Math.floor(level / 4) * 3)
+          : Math.max(24, 46 - Math.floor(level / 4) * 2);
     const ratio = timeLeft / maxTime;
     ctx.fillStyle = "rgba(5,14,17,.74)";
     ctx.fillRect(viewW - barW - pad * 2, pad, barW + pad, 16);
@@ -2252,7 +2177,7 @@
     ctx.fillStyle = "#9aadb0";
     ctx.font = "7px IBM Plex Mono";
     ctx.textAlign = "right";
-    const label = isVesselShift() ? "INSPECTION" : isMazeShift() ? "SHIFT" : isLoadShift() ? "LOAD WINDOW" : isBridgeShift() ? "WATCH" : "TIDE";
+    const label = isVesselShift() ? "INSPECTION" : isMazeShift() ? "SHIFT" : isLoadShift() ? "LOAD WINDOW" : "TIDE";
     ctx.fillText(`${label} ${Math.ceil(timeLeft)}s`, viewW - pad, pad + 8);
   }
 
@@ -2363,8 +2288,6 @@
     if (soundOn) ensureAudio();
     else if (audioContext?.state === "running") audioContext.suspend();
   });
-  smokeButton.addEventListener("click", useSmoke);
-  drinkButton.addEventListener("click", useDrink);
   document.querySelectorAll("[data-dir]").forEach(button => {
     button.addEventListener("pointerdown", event => { event.preventDefault(); move(button.dataset.dir); });
     button.addEventListener("pointerup", () => platformControl(button.dataset.dir, false));
