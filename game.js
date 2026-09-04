@@ -59,11 +59,11 @@
   let projectiles = [];
   let fireCooldown = 0;
   let boardingProgress = 0;
-  let cargoItems = [];
-  let loadPlan = [];
+  let puzzlePieces = [];
+  let draggedPiece = null;
   let loadComplete = false;
   let sailAway = 0;
-  let loadMessage = "FIND THE MANIFEST CARGO";
+  let loadMessage = "DRAG THE PHOTO PIECES INTO THE MATCHING SHAPES";
   let camera = { x: 5.5, y: 6.5, zoom: 1.35 };
   let mood = "neutral";
   let moodTimer = 0;
@@ -78,16 +78,7 @@
   const isVesselShift = () => shiftType() === "vessel";
   const isLoadShift = () => shiftType() === "load";
   const CARDINALS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
-  const cargoCatalog = [
-    { id: "beer", name: "BEER", clue: "KEG / AMBER / 480KG", color: "#e4aa31", mark: "B" },
-    { id: "butterflies", name: "BUTTERFLIES", clue: "LIVE / WINGED / FRAGILE", color: "#e881c0", mark: "BF" },
-    { id: "dragons", name: "DRAGONS", clue: "MYTHIC / HEAT / OVERSIZE", color: "#f05445", mark: "DR" },
-    { id: "cocaine", name: "COCAINE", clue: "CONTROLLED / WHITE / SEALED", color: "#e7ece9", mark: "CX" },
-    { id: "cigarettes", name: "CIGARETTES", clue: "TOBACCO / DRY / CARTONS", color: "#d6c5a1", mark: "CG" },
-    { id: "pineapples", name: "PINEAPPLES", clue: "CROWNED / TROPICAL / FRESH", color: "#77b94a", mark: "P" },
-    { id: "fireworks", name: "FIREWORKS", clue: "CLASS 1 / ROCKETS / HAZARD", color: "#9a77ef", mark: "FW" },
-    { id: "rubber-ducks", name: "RUBBER DUCKS", clue: "YELLOW / FLOATING / TOYS", color: "#f4d83b", mark: "RD" }
-  ];
+  const PUZZLE_BOARD = { x: 2, y: 1.25, w: 7, h: 5.5, columns: 3, rows: 2 };
   const musicTracks = {
     traffic: { tempo: .25, bass: [110, 110, 130.81, 98, 110, 146.83, 130.81, 98], lead: [220, 261.63, 293.66, 329.63, 293.66, 261.63, 246.94, 196] },
     maze: { tempo: .29, bass: [82.41, 98, 110, 82.41, 73.42, 98, 103.83, 73.42], lead: [164.81, 196, 220, 246.94, 220, 196, 174.61, 146.83] },
@@ -121,13 +112,13 @@
   ];
 
   const vesselPlatforms = [
-    { x: 0, y: 12, w: 3.0, h: 1 },
-    { x: 3.4, y: 10.25, w: 2.7, h: .42 },
-    { x: .7, y: 8.35, w: 2.6, h: .42 },
-    { x: 4.1, y: 6.45, w: 2.8, h: .42 },
-    { x: 7.7, y: 4.55, w: 2.5, h: .42 },
-    { x: 4.9, y: 2.7, w: 2.4, h: .42 },
-    { x: 8.1, y: 1.25, w: 2.9, h: .5 }
+    { baseX: 0, baseY: 12, x: 0, y: 12, w: 3.0, h: 1, axis: "none", amplitude: 0, speed: 0, phase: 0 },
+    { baseX: 3.4, baseY: 10.25, x: 3.4, y: 10.25, w: 2.7, h: .42, axis: "x", amplitude: .72, speed: .82, phase: .2 },
+    { baseX: .7, baseY: 8.35, x: .7, y: 8.35, w: 2.6, h: .42, axis: "y", amplitude: .48, speed: .74, phase: 1.4 },
+    { baseX: 4.1, baseY: 6.45, x: 4.1, y: 6.45, w: 2.8, h: .42, axis: "x", amplitude: .86, speed: .68, phase: 2.1 },
+    { baseX: 7.7, baseY: 4.55, x: 7.7, y: 4.55, w: 2.5, h: .42, axis: "y", amplitude: .58, speed: .79, phase: 3.2 },
+    { baseX: 4.9, baseY: 2.7, x: 4.9, y: 2.7, w: 2.4, h: .42, axis: "x", amplitude: .74, speed: .88, phase: 4.15 },
+    { baseX: 8.1, baseY: 1.25, x: 8.1, y: 1.25, w: 2.9, h: .5, axis: "none", amplitude: 0, speed: 0, phase: 0 }
   ];
 
   function resize() {
@@ -226,8 +217,7 @@
   }
 
   function resetPlatformPlayer() {
-    platformPlayer = { x: 1.2, y: 11.56, vx: 0, vy: 0, grounded: true };
-    platformMove = 0;
+    platformPlayer = { x: 1.2, y: 11.56, vx: 0, vy: 0, grounded: true, platformIndex: 0 };
     player.facing = "right";
   }
 
@@ -251,20 +241,36 @@
   }
 
   function initLoadPuzzle() {
-    const random = seededRandom((Date.now() ^ (level * 6263 + 401)) >>> 0);
-    const shuffled = cargoCatalog
-      .map(cargo => ({ cargo, order: random() }))
+    const pieceWidth = PUZZLE_BOARD.w / PUZZLE_BOARD.columns;
+    const pieceHeight = PUZZLE_BOARD.h / PUZZLE_BOARD.rows;
+    const staging = [[.25, 7.25], [4.34, 7.25], [8.4, 7.25], [.25, 10.15], [4.34, 10.15], [8.4, 10.15]];
+    const random = seededRandom((Date.now() ^ 6263) >>> 0);
+    const shuffledStaging = staging
+      .map(position => ({ position, order: random() }))
       .sort((a, b) => a.order - b.order)
-      .map(entry => entry.cargo);
-    loadPlan = shuffled.slice(0, 3).map(cargo => ({ ...cargo, loaded: false }));
-    const positions = [[1, 10], [5, 10], [9, 10], [1, 7], [5, 7], [9, 7], [2, 4], [8, 4]];
-    cargoItems = shuffled.map((cargo, index) => ({
-      ...cargo, col: positions[index][0], row: positions[index][1], loaded: false, rejected: 0
-    }));
+      .map(entry => entry.position);
+    puzzlePieces = Array.from({ length: 6 }, (_, id) => {
+      const column = id % PUZZLE_BOARD.columns;
+      const row = Math.floor(id / PUZZLE_BOARD.columns);
+      return {
+        id,
+        sourceColumn: column,
+        sourceRow: row,
+        x: shuffledStaging[id][0],
+        y: shuffledStaging[id][1],
+        homeX: shuffledStaging[id][0],
+        homeY: shuffledStaging[id][1],
+        targetX: PUZZLE_BOARD.x + column * pieceWidth,
+        targetY: PUZZLE_BOARD.y + row * pieceHeight,
+        width: pieceWidth,
+        height: pieceHeight,
+        placed: false
+      };
+    });
+    draggedPiece = null;
     loadComplete = false;
     sailAway = 0;
-    loadMessage = "FIND THE THREE MANIFEST ITEMS";
-    player.facing = "up";
+    loadMessage = "DRAG EACH PHOTO PIECE INTO ITS MATCHING OUTLINE";
   }
   function setupLevel() {
     resetPlayer();
@@ -274,8 +280,8 @@
     mazeDots.fill(0);
     projectiles = [];
     inspectors = [];
-    cargoItems = [];
-    loadPlan = [];
+    puzzlePieces = [];
+    draggedPiece = null;
     boardingProgress = 0;
     loadComplete = false;
     sailAway = 0;
@@ -301,7 +307,7 @@
   }
   function cameraTarget() {
     if (isVesselShift()) return { x: platformPlayer.x, y: platformPlayer.y };
-    if (isLoadShift() && loadComplete) return { x: 5.5 + sailAway * 1.2, y: 5.8 };
+    if (isLoadShift()) return { x: 5.5, y: 6.5 };
     const progress = 1 - player.moving;
     return {
       x: player.col + (player.targetCol - player.col) * progress + .5,
@@ -311,14 +317,14 @@
 
   function updateCamera(dt, snap = false) {
     const target = cameraTarget();
-    const targetZoom = isVesselShift() ? 1.78 : isMazeShift() ? 1.34 : isLoadShift() ? 1.38 : 1.42;
+    const targetZoom = isVesselShift() ? 1.78 : isMazeShift() ? 1.34 : isLoadShift() ? 1 : 1.42;
     const zoomBlend = snap ? 1 : 1 - Math.exp(-dt * 4.5);
     camera.zoom += (targetZoom - camera.zoom) * zoomBlend;
     const halfCols = COLS / camera.zoom / 2;
     const halfRows = ROWS / camera.zoom / 2;
     const desiredX = Math.max(halfCols, Math.min(COLS - halfCols, target.x));
     const desiredY = Math.max(halfRows, Math.min(ROWS - halfRows, target.y));
-    const followBlend = snap ? 1 : 1 - Math.exp(-dt * (isVesselShift() || isLoadShift() ? 7.2 : 5.2));
+    const followBlend = snap ? 1 : 1 - Math.exp(-dt * (isVesselShift() ? 7.2 : 5.2));
     camera.x += (desiredX - camera.x) * followBlend;
     camera.y += (desiredY - camera.y) * followBlend;
     canvas.dataset.camera = `${camera.x.toFixed(2)},${camera.y.toFixed(2)},${camera.zoom.toFixed(2)}`;
@@ -343,24 +349,22 @@
     ctx.textAlign = "left";
     ctx.fillText(`CAM FOLLOW // ${shiftType().toUpperCase()} // ${camera.zoom.toFixed(2)}X`, 19, viewH - 17);
     if (isLoadShift()) {
-      const panelWidth = Math.min(680, viewW * .72);
+      const placed = puzzlePieces.filter(piece => piece.placed).length;
+      const panelWidth = Math.min(610, viewW * .68);
       ctx.fillStyle = "rgba(3,12,17,.95)";
-      ctx.beginPath(); ctx.roundRect(10, 10, panelWidth, 118, 7); ctx.fill();
+      ctx.beginPath(); ctx.roundRect(10, 10, panelWidth, 72, 7); ctx.fill();
       ctx.strokeStyle = loadComplete ? COLORS.cyan : COLORS.amber;
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.fillStyle = loadComplete ? COLORS.cyan : COLORS.amber;
-      ctx.font = "800 10px IBM Plex Mono";
-      ctx.fillText(loadComplete ? "BON VOYAGE" : "FIT THE PIECES IN THIS EXACT ORDER", 22, 29);
-      loadPlan.forEach((item, index) => {
-        const y = 49 + index * 21;
-        ctx.fillStyle = item.loaded ? COLORS.cyan : "#eef3ed";
-        ctx.font = "700 10px IBM Plex Mono";
-        ctx.fillText(`BAY ${index + 1}  ${item.loaded ? "STOWED" : item.clue}`, 22, y);
-      });
-      ctx.fillStyle = loadMessage.includes("RESET") ? COLORS.red : "#8fa8ad";
+      ctx.font = "800 12px IBM Plex Mono";
+      ctx.fillText(loadComplete ? "IMAGE COMPLETE // BON VOYAGE" : `VESSEL PHOTO PUZZLE // ${placed} OF 6 PIECES`, 22, 32);
+      ctx.fillStyle = "#d9e7e3";
+      ctx.font = "700 10px IBM Plex Mono";
+      ctx.fillText("DRAG EACH SCRAMBLED PHOTO PIECE INTO ITS MATCHING OUTLINE", 22, 52);
+      ctx.fillStyle = "#8fa8ad";
       ctx.font = "700 8px IBM Plex Mono";
-      ctx.fillText(`MOVE TO THE MATCHING PICTURE + PRESS SPACE/F  //  ${loadMessage}`, 22, 115);
+      ctx.fillText(loadMessage, 22, 70);
     }
     ctx.save();
     ctx.globalAlpha = .08;
@@ -418,18 +422,18 @@
     canvas.dataset.mode = shiftType();
     canvas.dataset.player = `${player.targetCol},${player.targetRow}`;
     canvas.dataset.manifests = `${mazeManifests.filter(manifest => manifest.collected).length}/${mazeManifests.length}`;
-    canvas.dataset.loadPlan = loadPlan.map(item => `${item.name}:${item.loaded ? "loaded" : "needed"}`).join("|");
-    canvas.dataset.cargo = cargoItems.filter(item => !item.loaded).map(item => `${item.name}@${item.col},${item.row}`).join("|");
+    canvas.dataset.puzzle = `${puzzlePieces.filter(piece => piece.placed).length}/${puzzlePieces.length}`;
+    canvas.dataset.puzzlePieces = puzzlePieces.map(piece => `${piece.id}:${piece.x.toFixed(2)},${piece.y.toFixed(2)}>${piece.targetX.toFixed(2)},${piece.targetY.toFixed(2)}:${piece.placed ? 1 : 0}`).join("|");
     canvas.dataset.loadMessage = loadMessage;
     const labels = {
       traffic: `Shift ${level}: live terminal traffic. Use arrow keys or WASD to cross.`,
       maze: `Shift ${level}: container maze with dock workers. Collect every manifest and reach the north checkpoint.`,
       vessel: `Shift ${level}: vessel platformer. Jump with up or W and fire dangerous-goods magic with Space or F.`,
-      load: `Shift ${level}: stowage puzzle. Fit the pictured cargo pieces into vessel bays in numbered order.`
+      load: `Shift ${level}: drag the six scrambled photo pieces into the matching outlines to rebuild the vessel image.`
     };
     canvas.setAttribute("aria-label", labels[shiftType()]);
-    actionButton.textContent = isLoadShift() ? "FIT" : "FIRE";
-    actionButton.setAttribute("aria-label", isLoadShift() ? "Fit cargo puzzle piece" : "Fire dangerous-goods magic stun");
+    actionButton.textContent = isLoadShift() ? "DRAG" : "FIRE";
+    actionButton.setAttribute("aria-label", isLoadShift() ? "Drag photo puzzle pieces on the game board" : "Fire dangerous-goods magic stun");
   }
 
   function togglePause(force) {
@@ -479,6 +483,7 @@
 
   function move(direction) {
     if (!running || paused || (isLoadShift() && loadComplete)) return;
+    if (isLoadShift()) return;
     if (isVesselShift()) {
       platformControl(direction, true);
       return;
@@ -584,11 +589,7 @@
   }
 
   function fireDangerousGoods() {
-    if (!running || paused || fireCooldown > 0) return;
-    if (isLoadShift()) {
-      interactCargo();
-      return;
-    }
+    if (!running || paused || fireCooldown > 0 || isLoadShift()) return;
     if (!isVesselShift() || boardingProgress > 0) return;
     const direction = player.facing === "left" ? -1 : 1;
     projectiles.push({ x: platformPlayer.x + direction * .35, y: platformPlayer.y - .12, vx: direction * 7.5, life: 1.6 });
@@ -596,47 +597,6 @@
     playTone(610, .055, "sawtooth", .025);
     playNoise(.045, .012, 1900);
     setMood("angry", 1.1);
-  }
-  function interactCargo() {
-    if (!isLoadShift() || player.moving > 0 || loadComplete) return;
-    const cargo = cargoItems.find(item => !item.loaded && item.col === player.col && item.row === player.row);
-    if (!cargo) {
-      loadMessage = "NO CARGO IN THIS BAY";
-      playTone(105, .07, "square", .02);
-      return;
-    }
-    const required = loadPlan.find(item => !item.loaded);
-    const expectedBay = loadPlan.findIndex(item => !item.loaded) + 1;
-    if (!required || required.id !== cargo.id) {
-      cargo.rejected = 1;
-      score = Math.max(0, score - 250);
-      loadPlan.forEach(item => { item.loaded = false; });
-      cargoItems.forEach(item => { item.loaded = false; });
-      loadMessage = `${cargo.name} DOES NOT FIT BAY ${expectedBay} // STOWAGE RESET`;
-      setMood("angry", 1.8);
-      playTone(82, .18, "sawtooth", .04);
-      playNoise(.18, .025, 260);
-      updateHud();
-      return;
-    }
-    cargo.loaded = true;
-    required.loaded = true;
-    score += 600;
-    const bayNumber = loadPlan.findIndex(item => item.id === cargo.id) + 1;
-    loadMessage = `${cargo.name} LOCKED INTO BAY ${bayNumber}`;
-    setMood("laugh", .9);
-    burst(cargo.col + .5, cargo.row + .5, cargo.color, 20);
-    playTone(620, .06, "square", .028);
-    playTone(820, .1, "square", .024, .07);
-    playNoise(.08, .012, 1100);
-    if (loadPlan.every(item => item.loaded)) {
-      score += 1800;
-      loadComplete = true;
-      sailAway = .001;
-      setMood("laugh", 10);
-      loadMessage = "STOWAGE SOLVED // PINACOLADA SERVED";
-    }
-    updateHud();
   }
 
   function nextWorkerStep(startCol, startRow, targetCol, targetRow) {
@@ -697,6 +657,22 @@
       .join(";");
   }
 
+  function updateVesselPlatforms() {
+    const time = performance.now() / 1000;
+    vesselPlatforms.forEach((platform, index) => {
+      const previousX = platform.x;
+      const previousY = platform.y;
+      const offset = Math.sin(time * platform.speed + platform.phase) * platform.amplitude;
+      platform.x = platform.baseX + (platform.axis === "x" ? offset : 0);
+      platform.y = platform.baseY + (platform.axis === "y" ? offset : 0);
+      if (platformPlayer.grounded && platformPlayer.platformIndex === index) {
+        platformPlayer.x += platform.x - previousX;
+        platformPlayer.y += platform.y - previousY;
+      }
+    });
+    canvas.dataset.platforms = vesselPlatforms.map(platform => `${platform.x.toFixed(2)},${platform.y.toFixed(2)}`).join(";");
+  }
+
   function updatePlatformer(dt) {
     fireCooldown = Math.max(0, fireCooldown - dt);
     if (boardingProgress > 0) {
@@ -711,6 +687,7 @@
       return;
     }
 
+    updateVesselPlatforms();
     platformPlayer.vx = platformMove * 4.2;
     platformPlayer.vy += 18 * dt;
     const previousBottom = platformPlayer.y + .38;
@@ -719,13 +696,15 @@
     platformPlayer.grounded = false;
 
     if (platformPlayer.vy >= 0) {
-      for (const platform of vesselPlatforms) {
+      for (let index = 0; index < vesselPlatforms.length; index++) {
+        const platform = vesselPlatforms[index];
         const nextBottom = platformPlayer.y + .38;
         if (previousBottom <= platform.y + .05 && nextBottom >= platform.y &&
           platformPlayer.x + .24 > platform.x && platformPlayer.x - .24 < platform.x + platform.w) {
           platformPlayer.y = platform.y - .38;
           platformPlayer.vy = 0;
           platformPlayer.grounded = true;
+          platformPlayer.platformIndex = index;
           break;
         }
       }
@@ -771,7 +750,6 @@
   }
 
   function updateLoadPuzzle(dt) {
-    cargoItems.forEach(cargo => { cargo.rejected = Math.max(0, cargo.rejected - dt * 1.8); });
     if (!loadComplete) return;
     sailAway += dt;
     canvas.dataset.sailAway = sailAway.toFixed(2);
@@ -875,32 +853,60 @@
       ? { x: platformPlayer.x, y: platformPlayer.y }
       : cameraTarget();
     const behind = {
-      up: [0, .32], down: [0, -.32], left: [.32, 0], right: [-.32, 0]
-    }[player.facing] || [0, .32];
-    const colors = ["#ff5148", "#ffad31", "#ffe75a", "#55dc76", "#42dfe5", "#8d72ec", "#ef78b7"];
+      up: [0, .42], down: [0, -.42], left: [.42, 0], right: [-.42, 0]
+    }[player.facing] || [0, .42];
+    const colors = ["#ff3f4b", "#ff9f2d", "#ffe64a", "#45dc70", "#32dce5", "#715de4", "#ef68b5"];
     colors.forEach((color, index) => {
       rainbowFarts.push({
-        x: position.x + behind[0] + (Math.random() - .5) * .08,
-        y: position.y + behind[1] + (index - 3) * .035,
-        vx: behind[0] * 1.8 + (Math.random() - .5) * .25,
-        vy: behind[1] * 1.8 - .2 + (Math.random() - .5) * .18,
-        life: 1.15,
+        x: position.x + behind[0] + (index - 3) * Math.abs(behind[1]) * .05,
+        y: position.y + behind[1] + (index - 3) * Math.max(.045, Math.abs(behind[0]) * .05),
+        vx: behind[0] * 2.55 + (Math.random() - .5) * .18,
+        vy: behind[1] * 2.55 - .24 + (Math.random() - .5) * .14,
+        life: 1.8,
         color,
-        size: 5 + Math.random() * 4
+        size: 13 + Math.random() * 7,
+        cloud: index === 0
       });
     });
-    playTone(72, .08, "sawtooth", .012);
+    playTone(68, .16, "sawtooth", .035);
+    playTone(45, .22, "square", .022, .035);
+    playNoise(.16, .032, 105);
   }
 
   function drawRainbowFarts() {
     rainbowFarts.forEach(fart => {
-      ctx.globalAlpha = Math.max(0, fart.life / 1.15);
+      const alpha = Math.max(0, fart.life / 1.8);
+      const x = fart.x * cellW;
+      const y = fart.y * cellH;
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = fart.color;
       ctx.fillStyle = fart.color;
+      ctx.shadowColor = fart.color;
+      ctx.shadowBlur = fart.size * .8;
+      ctx.lineWidth = fart.size;
+      ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.ellipse(fart.x * cellW, fart.y * cellH, fart.size, fart.size * .56, 0, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(x, y);
+      ctx.quadraticCurveTo(
+        x - fart.vx * cellW * .14,
+        y - fart.vy * cellH * .08 - fart.size,
+        x - fart.vx * cellW * .28,
+        y - fart.vy * cellH * .18
+      );
+      ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, fart.size * .55, 0, Math.PI * 2); ctx.fill();
+      if (fart.cloud) {
+        ctx.fillStyle = "rgba(245,255,252,.9)";
+        ctx.shadowColor = "rgba(255,255,255,.7)";
+        ctx.beginPath();
+        ctx.arc(x + fart.size * .4, y, fart.size * .48, 0, Math.PI * 2);
+        ctx.arc(x, y - fart.size * .25, fart.size * .58, 0, Math.PI * 2);
+        ctx.arc(x - fart.size * .45, y, fart.size * .42, 0, Math.PI * 2);
+        ctx.fill();
+      }
     });
     ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
   }
 
   function burst(x, y, color, count) {
@@ -929,7 +935,7 @@
       drawTerminal();
       drawVehicles();
     }
-    if (!(isLoadShift() && loadComplete)) drawPlayer();
+    if (!isLoadShift()) drawPlayer();
     drawRainbowFarts();
     drawParticles();
     ctx.restore();
@@ -1556,71 +1562,56 @@
     ctx.closePath();
   }
 
-  function drawCargoUnit(cargo, size) {
+
+  function drawImagePuzzlePiece(piece, target = false) {
+    const x = (target ? piece.targetX : piece.x) * cellW;
+    const y = (target ? piece.targetY : piece.y) * cellH;
+    const width = piece.width * cellW;
+    const height = piece.height * cellH;
     ctx.save();
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    if (cargo.id === "beer") {
-      const metal = ctx.createLinearGradient(-size * .24, 0, size * .24, 0);
-      metal.addColorStop(0, "#7b8584"); metal.addColorStop(.5, "#d9ded8"); metal.addColorStop(1, "#677270");
-      ctx.fillStyle = metal;
-      ctx.beginPath(); ctx.roundRect(-size * .24, -size * .32, size * .48, size * .64, size * .11); ctx.fill();
-      ctx.strokeStyle = "#303a3b"; ctx.lineWidth = size * .045;
-      ctx.beginPath(); ctx.moveTo(-size * .23, -size * .17); ctx.lineTo(size * .23, -size * .17); ctx.moveTo(-size * .23, size * .17); ctx.lineTo(size * .23, size * .17); ctx.stroke();
-      ctx.fillStyle = "#d99c27"; ctx.beginPath(); ctx.arc(0, 0, size * .1, 0, Math.PI * 2); ctx.fill();
-    } else if (cargo.id === "butterflies") {
-      const wing = ctx.createRadialGradient(0, 0, 1, 0, 0, size * .35);
-      wing.addColorStop(0, "#ffe28a"); wing.addColorStop(.55, "#e881c0"); wing.addColorStop(1, "#7948b7");
-      ctx.fillStyle = wing;
-      for (const side of [-1, 1]) {
-        ctx.beginPath(); ctx.ellipse(side * size * .19, -size * .12, size * .2, size * .29, side * .6, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(side * size * .16, size * .17, size * .14, size * .21, side * -.45, 0, Math.PI * 2); ctx.fill();
-      }
-      ctx.fillStyle = "#21152f"; ctx.beginPath(); ctx.ellipse(0, 0, size * .045, size * .29, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = "#21152f"; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(0, -size * .25); ctx.quadraticCurveTo(-size * .08, -size * .39, -size * .14, -size * .39); ctx.moveTo(0, -size * .25); ctx.quadraticCurveTo(size * .08, -size * .39, size * .14, -size * .39); ctx.stroke();
-    } else if (cargo.id === "dragons") {
-      ctx.fillStyle = "#b72e2b";
-      ctx.beginPath(); ctx.ellipse(0, size * .04, size * .23, size * .25, -.3, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(-size * .1, -size * .02); ctx.lineTo(-size * .44, -size * .3); ctx.lineTo(-size * .28, size * .08); ctx.closePath(); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(size * .08, -size * .04); ctx.lineTo(size * .4, -size * .35); ctx.lineTo(size * .28, size * .07); ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = "#b72e2b"; ctx.lineWidth = size * .1;
-      ctx.beginPath(); ctx.moveTo(size * .16, size * .16); ctx.quadraticCurveTo(size * .47, size * .3, size * .39, size * .46); ctx.stroke();
-      ctx.fillStyle = "#ecb247"; ctx.beginPath(); ctx.moveTo(-size * .11, -size * .24); ctx.lineTo(-size * .04, -size * .42); ctx.lineTo(size * .02, -size * .23); ctx.fill();
-    } else if (cargo.id === "cocaine") {
-      ctx.fillStyle = "#f0f1ed"; ctx.beginPath(); ctx.roundRect(-size * .3, -size * .23, size * .6, size * .46, 5); ctx.fill();
-      ctx.strokeStyle = "#9ba3a0"; ctx.lineWidth = 2; ctx.stroke();
-      ctx.fillStyle = "#d14842"; ctx.fillRect(-size * .035, -size * .23, size * .07, size * .46);
-      ctx.fillStyle = "#26363a"; ctx.font = `800 ${size * .13}px IBM Plex Mono`; ctx.textAlign = "center"; ctx.fillText("CONTROLLED", 0, size * .045);
-    } else if (cargo.id === "cigarettes") {
-      ctx.fillStyle = "#efe9db"; ctx.beginPath(); ctx.roundRect(-size * .28, -size * .28, size * .56, size * .56, 4); ctx.fill();
-      ctx.fillStyle = "#b73730"; ctx.fillRect(-size * .28, -size * .07, size * .56, size * .18);
-      for (let stick = 0; stick < 5; stick++) {
-        const x = -size * .19 + stick * size * .095;
-        ctx.fillStyle = "#fff9df"; ctx.fillRect(x, -size * .4, size * .045, size * .2);
-        ctx.fillStyle = "#c98c45"; ctx.fillRect(x, -size * .23, size * .045, size * .03);
-      }
-    } else if (cargo.id === "pineapples") {
-      ctx.fillStyle = "#d7a82e"; ctx.beginPath(); ctx.ellipse(0, size * .08, size * .25, size * .34, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = "#765f25"; ctx.lineWidth = 1.5;
-      for (let stripe = -2; stripe <= 2; stripe++) { ctx.beginPath(); ctx.moveTo(-size * .2, stripe * size * .1); ctx.lineTo(size * .2, stripe * size * .1 + size * .16); ctx.moveTo(size * .2, stripe * size * .1); ctx.lineTo(-size * .2, stripe * size * .1 + size * .16); ctx.stroke(); }
-      ctx.fillStyle = "#4b9a48";
-      for (let leaf = -2; leaf <= 2; leaf++) { ctx.beginPath(); ctx.moveTo(0, -size * .21); ctx.lineTo(leaf * size * .08, -size * .5); ctx.lineTo(leaf * size * .04 + size * .04, -size * .18); ctx.fill(); }
-    } else if (cargo.id === "fireworks") {
-      for (let rocket = -1; rocket <= 1; rocket++) {
-        ctx.fillStyle = rocket === 0 ? "#d94b43" : "#7460d6";
-        ctx.beginPath(); ctx.roundRect(rocket * size * .16 - size * .055, -size * .25 + Math.abs(rocket) * size * .08, size * .11, size * .43, 3); ctx.fill();
-        ctx.beginPath(); ctx.moveTo(rocket * size * .16 - size * .055, -size * .25 + Math.abs(rocket) * size * .08); ctx.lineTo(rocket * size * .16, -size * .39 + Math.abs(rocket) * size * .08); ctx.lineTo(rocket * size * .16 + size * .055, -size * .25 + Math.abs(rocket) * size * .08); ctx.fill();
-        ctx.strokeStyle = "#cbb681"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(rocket * size * .16, size * .18); ctx.lineTo(rocket * size * .2, size * .43); ctx.stroke();
-      }
+    tracePuzzlePiece(x, y, width, height, piece.id);
+    ctx.clip();
+    const image = photoAssets.vessel;
+    if (image?.complete && image.naturalWidth) {
+      const sourceWidth = image.naturalWidth / PUZZLE_BOARD.columns;
+      const sourceHeight = image.naturalHeight / PUZZLE_BOARD.rows;
+      ctx.globalAlpha = target ? .15 : 1;
+      ctx.drawImage(
+        image,
+        piece.sourceColumn * sourceWidth,
+        piece.sourceRow * sourceHeight,
+        sourceWidth,
+        sourceHeight,
+        x,
+        y,
+        width,
+        height
+      );
     } else {
-      ctx.fillStyle = "#f2ce31";
-      ctx.beginPath(); ctx.ellipse(-size * .06, size * .11, size * .3, size * .22, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(size * .18, -size * .11, size * .17, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#e98127"; ctx.beginPath(); ctx.moveTo(size * .32, -size * .12); ctx.lineTo(size * .48, -size * .06); ctx.lineTo(size * .32, 0); ctx.fill();
-      ctx.fillStyle = "#151b1d"; ctx.beginPath(); ctx.arc(size * .22, -size * .16, size * .025, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = target ? "rgba(44,78,86,.35)" : `hsl(${190 + piece.id * 18} 42% 34%)`;
+      ctx.fillRect(x, y, width, height);
+    }
+    if (!target) {
+      const shade = ctx.createLinearGradient(x, y, x, y + height);
+      shade.addColorStop(0, "rgba(255,255,255,.08)");
+      shade.addColorStop(1, "rgba(0,10,15,.28)");
+      ctx.fillStyle = shade;
+      ctx.fillRect(x, y, width, height);
     }
     ctx.restore();
+    tracePuzzlePiece(x, y, width, height, piece.id);
+    ctx.strokeStyle = piece.placed ? COLORS.cyan : target ? "rgba(255,181,46,.55)" : draggedPiece?.id === piece.id ? "#fff3ae" : "#c8d8d5";
+    ctx.lineWidth = piece.placed ? 3 : 2;
+    ctx.shadowColor = piece.placed ? COLORS.cyan : "rgba(0,0,0,.65)";
+    ctx.shadowBlur = piece.placed ? 10 : 7;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    if (target && !piece.placed) {
+      ctx.fillStyle = "rgba(255,215,132,.75)";
+      ctx.font = `800 ${Math.max(10, cellH * .2)}px IBM Plex Mono`;
+      ctx.textAlign = "center";
+      ctx.fillText(String(piece.id + 1), x + width / 2, y + height / 2);
+    }
   }
 
   function drawLoadPuzzle() {
@@ -1628,106 +1619,39 @@
       drawSailAway();
       return;
     }
-    const quay = ctx.createLinearGradient(0, 0, 0, viewH);
-    quay.addColorStop(0, "#0a3b49");
-    quay.addColorStop(.27, "#0b2933");
-    quay.addColorStop(.28, "#2a393b");
-    quay.addColorStop(1, "#17282d");
-    ctx.fillStyle = quay;
+    const backdrop = ctx.createLinearGradient(0, 0, 0, viewH);
+    backdrop.addColorStop(0, "#0a2530");
+    backdrop.addColorStop(1, "#07151c");
+    ctx.fillStyle = backdrop;
     ctx.fillRect(0, 0, viewW, viewH);
-    drawPhotoBackdrop("terminal", .22);
+    drawPhotoBackdrop("terminal", .34);
+    ctx.fillStyle = "rgba(2,10,15,.55)";
+    ctx.fillRect(0, 0, viewW, viewH);
 
-    const waveOffset = performance.now() * .025;
-    ctx.strokeStyle = "rgba(87,231,224,.24)";
+    const boardX = PUZZLE_BOARD.x * cellW;
+    const boardY = PUZZLE_BOARD.y * cellH;
+    const boardWidth = PUZZLE_BOARD.w * cellW;
+    const boardHeight = PUZZLE_BOARD.h * cellH;
+    ctx.fillStyle = "rgba(3,13,18,.88)";
+    ctx.beginPath(); ctx.roundRect(boardX - 16, boardY - 16, boardWidth + 32, boardHeight + 32, 10); ctx.fill();
+    ctx.strokeStyle = "rgba(255,181,46,.65)";
     ctx.lineWidth = 2;
-    for (let row = 0; row < 5; row++) {
-      ctx.beginPath();
-      for (let x = -40; x <= viewW + 40; x += 24) {
-        const y = cellH * (.55 + row * .42) + Math.sin((x + waveOffset + row * 31) * .035) * 5;
-        if (x === -40) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-    }
-
-    ctx.fillStyle = "#0a1820";
-    ctx.beginPath();
-    ctx.moveTo(cellW * .5, cellH * .3);
-    ctx.lineTo(cellW * 10.6, cellH * .3);
-    ctx.lineTo(cellW * 9.9, cellH * 2.55);
-    ctx.lineTo(cellW * 1.25, cellH * 2.55);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = "rgba(96,214,211,.5)";
-    ctx.lineWidth = 3;
     ctx.stroke();
-    ctx.fillStyle = "#c7e0dc";
-    ctx.font = `800 ${Math.max(16, cellH * .38)}px Arial Narrow, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.fillText("MV UNICORN STAR // CARGO HOLD", cellW * 5.55, cellH * 1.03);
 
-    loadPlan.forEach((item, index) => {
-      const x = cellW * (3.45 + index * 1.42);
-      const y = cellH * 1.25;
-      const width = cellW * 1.08;
-      const height = cellH * .82;
-      ctx.fillStyle = item.loaded ? item.color : "#102933";
-      ctx.strokeStyle = item.loaded ? "#d8fff7" : "rgba(115,154,158,.7)";
-      ctx.lineWidth = 2;
-      tracePuzzlePiece(x, y, width, height, index);
-      ctx.fill(); ctx.stroke();
-      if (item.loaded) {
-        ctx.save(); ctx.translate(x + width * .5, y + height * .48); drawCargoUnit(item, Math.min(width, height) * .64); ctx.restore();
-      } else {
-        ctx.fillStyle = "#789197";
-        ctx.font = `800 ${Math.max(8, cellH * .18)}px IBM Plex Mono`;
-        ctx.fillText(`BAY ${index + 1}`, x + width * .5, y + height * .52);
-      }
+    puzzlePieces.forEach(piece => {
+      if (!piece.placed) drawImagePuzzlePiece(piece, true);
     });
+    puzzlePieces.filter(piece => piece.placed).forEach(piece => drawImagePuzzlePiece(piece));
+    puzzlePieces.filter(piece => !piece.placed && draggedPiece?.id !== piece.id).forEach(piece => drawImagePuzzlePiece(piece));
+    if (draggedPiece) drawImagePuzzlePiece(draggedPiece);
 
-    ctx.strokeStyle = "rgba(213,227,220,.13)";
-    ctx.lineWidth = 1;
-    for (let row = 3; row <= ROWS; row++) {
-      ctx.beginPath(); ctx.moveTo(0, row * cellH); ctx.lineTo(viewW, row * cellH); ctx.stroke();
-    }
-    for (let col = 0; col <= COLS; col++) {
-      ctx.beginPath(); ctx.moveTo(col * cellW, cellH * 3); ctx.lineTo(col * cellW, viewH); ctx.stroke();
-    }
-    ctx.fillStyle = "rgba(255,181,46,.2)";
-    ctx.fillRect(0, cellH * 2.82, viewW, cellH * .18);
+    const placed = puzzlePieces.filter(piece => piece.placed).length;
+    ctx.fillStyle = "rgba(3,12,17,.9)";
+    ctx.beginPath(); ctx.roundRect(cellW * 2.5, cellH * 6.96, cellW * 6, cellH * .58, 5); ctx.fill();
     ctx.fillStyle = COLORS.amber;
-    for (let x = -cellH; x < viewW; x += cellH * .7) {
-      ctx.beginPath(); ctx.moveTo(x, cellH * 2.82); ctx.lineTo(x + cellH * .22, cellH * 2.82); ctx.lineTo(x + cellH * .45, cellH * 3); ctx.lineTo(x + cellH * .23, cellH * 3); ctx.closePath(); ctx.fill();
-    }
-
-    cargoItems.forEach(cargo => {
-      if (cargo.loaded) return;
-      const x = (cargo.col + .5) * cellW;
-      const y = (cargo.row + .5) * cellH;
-      const bob = Math.sin(performance.now() / 260 + cargo.col) * 2;
-      const pieceSize = Math.min(cellW, cellH) * .88;
-      ctx.save();
-      ctx.translate(x, y + bob);
-      ctx.shadowColor = cargo.rejected > 0 ? COLORS.red : "rgba(0,0,0,.72)";
-      ctx.shadowBlur = cargo.rejected > 0 ? 22 : 12;
-      ctx.fillStyle = cargo.rejected > 0 ? "#592727" : "#34474b";
-      ctx.strokeStyle = cargo.rejected > 0 ? COLORS.red : "#789295";
-      ctx.lineWidth = 2;
-      tracePuzzlePiece(-pieceSize * .52, -pieceSize * .5, pieceSize, pieceSize, cargo.col % 3);
-      ctx.fill(); ctx.stroke();
-      ctx.shadowBlur = 0;
-      drawCargoUnit(cargo, pieceSize * .74);
-      ctx.fillStyle = cargo.rejected > 0 ? "#ffaaa2" : "#d8e7e3";
-      ctx.font = `700 ${Math.max(6, cellH * .11)}px IBM Plex Mono`;
-      ctx.textAlign = "center";
-      ctx.fillText(cargo.rejected > 0 ? "WRONG FIT" : cargo.name, 0, pieceSize * .62);
-      ctx.restore();
-    });
-
-    ctx.fillStyle = "rgba(5,14,18,.78)";
-    ctx.fillRect(cellW * 3.1, cellH * 11.75, cellW * 4.8, cellH * .55);
-    ctx.fillStyle = COLORS.cyan;
-    ctx.font = `700 ${Math.max(7, cellH * .14)}px IBM Plex Mono`;
+    ctx.font = `800 ${Math.max(9, cellH * .18)}px IBM Plex Mono`;
     ctx.textAlign = "center";
-    ctx.fillText("STAND ON CARGO + PRESS SPACE / F TO LOAD", cellW * 5.5, cellH * 12.08);
+    ctx.fillText(`DRAG + DROP TO REBUILD MV UNICORN STAR // ${placed}/6`, cellW * 5.5, cellH * 7.32);
   }
 
   function drawSailAway() {
@@ -2253,6 +2177,81 @@
     requestAnimationFrame(loop);
   }
 
+  function pointerToWorld(event) {
+    const rect = canvas.getBoundingClientRect();
+    const screenX = (event.clientX - rect.left) * viewW / rect.width;
+    const screenY = (event.clientY - rect.top) * viewH / rect.height;
+    return {
+      x: (screenX - viewW / 2) / camera.zoom / cellW + camera.x,
+      y: (screenY - viewH / 2) / camera.zoom / cellH + camera.y
+    };
+  }
+
+  function handlePuzzlePointerDown(event) {
+    if (!running || paused || !isLoadShift() || loadComplete) return;
+    const point = pointerToWorld(event);
+    for (let index = puzzlePieces.length - 1; index >= 0; index--) {
+      const piece = puzzlePieces[index];
+      if (piece.placed) continue;
+      if (point.x >= piece.x && point.x <= piece.x + piece.width && point.y >= piece.y && point.y <= piece.y + piece.height) {
+        draggedPiece = piece;
+        piece.dragOffsetX = point.x - piece.x;
+        piece.dragOffsetY = point.y - piece.y;
+        canvas.setPointerCapture?.(event.pointerId);
+        canvas.style.cursor = "grabbing";
+        loadMessage = `MOVING PIECE ${piece.id + 1} // DROP ON MATCHING OUTLINE`;
+        updateHud();
+        event.preventDefault();
+        return;
+      }
+    }
+  }
+
+  function handlePuzzlePointerMove(event) {
+    if (!draggedPiece || !isLoadShift()) return;
+    const point = pointerToWorld(event);
+    draggedPiece.x = Math.max(0, Math.min(COLS - draggedPiece.width, point.x - draggedPiece.dragOffsetX));
+    draggedPiece.y = Math.max(0, Math.min(ROWS - draggedPiece.height, point.y - draggedPiece.dragOffsetY));
+    event.preventDefault();
+  }
+
+  function handlePuzzlePointerUp(event) {
+    if (!draggedPiece || !isLoadShift()) return;
+    const piece = draggedPiece;
+    const correct = Math.abs(piece.x - piece.targetX) < .42 && Math.abs(piece.y - piece.targetY) < .42;
+    if (correct) {
+      piece.x = piece.targetX;
+      piece.y = piece.targetY;
+      piece.placed = true;
+      score += 400;
+      loadMessage = `PIECE ${piece.id + 1} LOCKED INTO PLACE`;
+      setMood("laugh", .9);
+      playTone(620, .06, "square", .03);
+      playTone(820, .1, "square", .025, .06);
+    } else {
+      piece.x = piece.homeX;
+      piece.y = piece.homeY;
+      loadMessage = `PIECE ${piece.id + 1} RETURNED // MATCH THE PHOTO EDGES`;
+      setMood("angry", .8);
+      playTone(105, .09, "sawtooth", .025);
+    }
+    draggedPiece = null;
+    canvas.releasePointerCapture?.(event.pointerId);
+    canvas.style.cursor = "grab";
+    if (puzzlePieces.every(item => item.placed)) {
+      score += 2200;
+      loadComplete = true;
+      sailAway = .001;
+      loadMessage = "VESSEL IMAGE COMPLETE // PINACOLADA SERVED";
+      setMood("laugh", 10);
+      playTone(523.25, .12, "triangle", .035);
+      playTone(659.25, .16, "triangle", .03, .1);
+      playTone(783.99, .24, "triangle", .028, .22);
+    }
+    updateHud();
+    event.preventDefault();
+  }
+
   function handleKey(event) {
     const key = event.key.toLowerCase();
     const directions = { arrowup: "up", w: "up", arrowdown: "down", s: "down", arrowleft: "left", a: "left", arrowright: "right", d: "right" };
@@ -2277,6 +2276,10 @@
   window.addEventListener("keydown", handleKey);
   document.addEventListener("visibilitychange", () => { if (document.hidden && running && !paused) togglePause(true); });
   window.addEventListener("keyup", handleKeyUp);
+  canvas.addEventListener("pointerdown", handlePuzzlePointerDown);
+  canvas.addEventListener("pointermove", handlePuzzlePointerMove);
+  canvas.addEventListener("pointerup", handlePuzzlePointerUp);
+  canvas.addEventListener("pointercancel", handlePuzzlePointerUp);
   document.getElementById("startButton").addEventListener("click", startGame);
   levelSelector.addEventListener("change", startGame);
   document.getElementById("pauseButton").addEventListener("click", () => togglePause());
