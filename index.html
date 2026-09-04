@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#071116" />
+  <title>Harbor Hop — Unicorn Dock Run</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Harbor Hop home">
+        <span class="brand-mark" aria-hidden="true">U</span>
+        <span>
+          <strong>HARBOR HOP</strong>
+          <small>UNICORN DOCK RUN</small>
+        </span>
+      </a>
+      <div class="status-pill"><span></span> TERMINAL 08 · ACTIVE</div>
+      <button id="soundButton" class="icon-button" aria-label="Toggle sound" title="Toggle sound">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Zm12.5 3a4.5 4.5 0 0 0-2-3.87v7.74A4.5 4.5 0 0 0 16.5 12Z"/></svg>
+      </button>
+    </header>
+
+    <section class="game-layout">
+
+      <section class="game-panel panel" aria-label="Harbor Hop game">
+        <div class="scorebar">
+          <div><small>SCORE</small><strong id="score">000000</strong></div>
+          <div><small>SHIFT</small><strong id="level">01</strong></div>
+          <div><small>UNICORNS</small><strong id="lives" class="lives" aria-label="3 lives">◆ ◆ ◆</strong></div>
+          <label class="level-select" for="levelSelector">
+            <small>LEVEL SELECT</small>
+            <select id="levelSelector" aria-label="Choose starting shift">
+              <option value="1">01 · TRAFFIC</option>
+              <option value="2">02 · MAZE</option>
+              <option value="3">03 · VESSEL</option>
+              <option value="4">04 · LOAD PLAN</option>
+            </select>
+          </label>
+          <button id="pauseButton" class="pause-button" aria-label="Pause game"><span></span><span></span></button>
+        </div>
+
+        <div id="canvasWrap" class="canvas-wrap">
+          <canvas id="gameCanvas" aria-label="A lane crossing arcade game. Use arrow keys or WASD to move."></canvas>
+          <div id="startOverlay" class="game-overlay">
+            <div class="overlay-card">
+              <span class="hazard-stripe"></span>
+              <div class="unicorn-badge" aria-hidden="true">♘</div>
+              <div class="eyebrow">BERTH ACCESS GRANTED</div>
+              <h2>NORTH GATE<br>IS OPEN</h2>
+              <p>Cross eight active lanes. Lorries, shunts, stackers, and yard trucks do not stop.</p>
+              <button id="startButton" class="primary-button"><span>START SHIFT</span><b>ENTER ↵</b></button>
+            </div>
+          </div>
+          <div id="pauseOverlay" class="game-overlay hidden">
+            <div class="overlay-card compact">
+              <div class="eyebrow">SHIFT STATUS</div>
+              <h2 id="pauseTitle">PAUSED</h2>
+              <p id="pauseMessage">The terminal is holding.</p>
+              <button id="resumeButton" class="primary-button"><span>RESUME</span><b>P</b></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="mobile-controls" aria-label="Touch controls">
+          <button data-dir="left" aria-label="Move left">←</button>
+          <span>
+            <button data-dir="up" aria-label="Move up">↑</button>
+            <button data-dir="down" aria-label="Move down">↓</button>
+          </span>
+          <button data-dir="right" aria-label="Move right">→</button>
+          <button class="fire-control" data-action="fire" aria-label="Fire dangerous-goods magic stun">FIRE</button>
+        </div>
+
+        <footer class="game-footer">
+          <span><i class="cyan"></i>NORTH CHECKPOINT</span>
+          <span><i class="amber"></i>ACTIVE TRAFFIC</span>
+          <span class="best">BEST <b id="bestScore">000000</b></span>
+        </footer>
+      </section>
+    </section>
+
+  </main>
+  <script src="game.js"></script>
+</body>
+</html>
